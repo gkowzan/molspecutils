@@ -1,0 +1,6 @@
+numpy
+scipy
+xarray
+matplotlib
+pyfftw
+shed@ git+ssh://git@gitlab.com/allisonlab/mdcs/shed.git@master
