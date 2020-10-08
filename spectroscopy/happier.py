@@ -1,15 +1,193 @@
 """Auxilliary functions extending the HAPI library.
 """
+# * Imports and constants
+from pathlib import Path
+import re
+import appdirs
 import numpy as np
+import scipy.constants as C
 import spectroscopy.foreign.hapi3 as h3
 from spectroscopy.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
-                                TIPS_NPT)
+                                      TIPS_NPT)
+import shed.units as u
 
-
+dirs = appdirs.AppDirs('happier', 'gkowzan')
+hitran_cache = str(Path(dirs.user_cache_dir) / 'db')
 #: Boltzmann constant in erg/K
 cBolts = 1.380648813E-16
+Tref = 296.0
+
+# * Retrieve molecular data from HITRAN
+def llq_to_pair(llq):
+    """Convert `local_lower_quanta` string to (Jpp, Jp)."""
+    match = re.fullmatch('\s*([PR])\s*([0-9]+)\s*', llq)
+    branch, j = match.group(1), int(match.group(2))
+    if branch=='R':
+        jp = j+1
+    elif branch=='P':
+        jp = j-1
+    else:
+        raise ValueError('Branch is neither "R" nor "P".')
+
+    return (j, jp)
 
 
+def energy_levels(nus: list, M: int, I: int, db: str=hitran_cache):
+    """Retrieve energy levels from HITRAN for.
+
+    Parameters
+    ----------
+    nu: list of int
+        Vibrational numbers.
+    M: int
+        HITRAN molecule id.
+    I: int
+        HITRAN isotopologue id for molecule `M`.
+    db: str, optional
+        Path to the database folder.
+
+    Returns
+    -------
+    levels: dict
+        keys are tuples (nu, j), values are energy levels in cm-1
+    """
+    table_name = "{:d}_{:d}".format(M, I)
+    h3.db_begin(db)
+    if table_name not in h3.getTableList():
+        h3.fetch(table_name, M, I, 0, 99999)
+
+    levels = {}
+    for nu in nus:
+        conds = ('AND', ('=', 'molec_id', M), ('=', 'local_iso_id', I),
+                 ('MATCH', ('STR', r'\s+{:d}\s*'.format(nu)), 'global_lower_quanta'),
+                 ('MATCH', ('STR', r'\s+{:d}\s*'.format(nu)), 'global_upper_quanta'))
+        dest_table = '{:s}_nu{:d}'.format(table_name, nu)
+        h3.select(table_name, Conditions=conds, DestinationTableName=dest_table, Output=False)
+        llqs, elowers = h3.getColumns(dest_table, ParameterNames=('local_lower_quanta', 'elower'))
+        for llq, elower in zip(llqs, elowers):
+            levels[(nu, llq_to_pair(llq)[0])] = elower
+
+    return levels
+
+
+def equilibrium_pops(levels: dict, T: float, M: int, I: int):
+    """Calculate equilibrium populations at temperature T."""
+    kt = u.joule2wn(C.k*T)
+    return {k: (2*k[1]+1)*np.exp(-v/kt)/PYTIPS(M, I, T) for k, v in levels.items()}
+
+
+def line_params(bands: list, M: int, I: int, db: str=hitran_cache):
+    r"""Collect parameters of rovib transitions.
+
+    `mu` parameter is :math:`\sqrt{S_{J',J''}}=\sqrt{3\frac{\epsilon_0\hbar\pi c^3}{\omega^3}A_{J'\to J''}(2J'+1)}`.
+
+    Parameters
+    ----------
+    bands: list of tuple
+        List of (nupp, nup) tuples.
+    M: int
+        HITRAN molecule id.
+    I: int
+        HITRAN isotopologue id.
+    db: str
+        Path to HITRAN db.
+
+    Returns
+    -------
+    params: dict of dict
+        Nested dict: ((nupp, jpp), (nup, jp)) -> parameter -> value, where
+        parameter is one of: 'mu' , 'gam', 'del', 'nu'.
+    """
+    table_name = "{:d}_{:d}".format(M, I)
+    h3.db_begin(db)
+    if table_name not in h3.getTableList():
+        h3.fetch(table_name, M, I, 0, 99999)
+
+    params = {}
+    for nupp, nup in bands:
+        conds = ('AND', ('=', 'molec_id', M), ('=', 'local_iso_id', I),
+                 ('MATCH', ('STR', r'\s+{:d}\s*'.format(nupp)), 'global_lower_quanta'),
+                 ('MATCH', ('STR', r'\s+{:d}\s*'.format(nup)), 'global_upper_quanta'))
+        dest_name = '{:s}_band_{:d}_{:d}'.format(table_name, nupp, nup)
+        h3.select(table_name, DestinationTableName=dest_name, Conditions=conds, Output=False)
+        param_list = ('local_lower_quanta', 'a', 'gamma_air', 'delta_air', 'nu', 'n_air')
+        llqs, As, gams, delts, nus, n_airs = h3.getColumns(dest_name, ParameterNames=param_list)
+        for llq, a, gam, delt, nu, n_air in zip(llqs, As, gams, delts, nus, n_airs):
+            jpp, jp = llq_to_pair(llq)
+            mu = np.sqrt(a*(2*jp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
+            # See Eq. 57 in rotsim2d_roadmap.pdf
+            mu = np.sqrt(a*(2*jp+1)/(2*jpp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
+            params[((nupp, jpp), (nup, jp))] = {
+                'mu': mu, 'gam': gam, 'del': delt, 'n_air': n_air ,'nu': nu}
+    return params
+
+def generate_line_params(bands: list, elevels: dict, line_params: dict):
+    """Generate line parameters based on HITRAN data.
+
+    Parameters
+    ----------
+    bands: list of tuple
+        (nupp, nup, dj) tuples.
+    elevels: dict
+        Result of :func:`energy_levels`.
+    line_params: dict
+        Result of :func:`line_params`.
+
+    Returns
+    -------
+    params: dict of dict
+        Nested dict: ((nupp, jpp), (nup, jp)) -> parameter -> value, where
+        parameter is one of: 'mu' , 'gam', 'del', 'nu'.
+    """
+    params = {}
+
+    # generate line positions
+    for nupp, nup, dj in bands:
+        if nupp == nup:
+            djs = (dj, )
+        else:
+            djs = (dj, -dj)
+        for nu, j in elevels:
+            if nu == nupp:
+                for dj in djs:
+                    if (nup, j+dj) in elevels:
+                        params.setdefault(((nupp, j), (nup, j+dj)), {})['nu'] = elevels[(nup, j+dj)]-elevels[(nupp, j)]
+
+    # generate line parameters, remove lines for which no parameters can be found
+    for line in list(params.keys()):
+        found = False
+        for old_line in line_params:
+            if line[0] == old_line[0]:
+                params[line]['gam'] = line_params[old_line]['gam']
+                params[line]['n_air'] = line_params[old_line]['n_air']
+                params[line]['del'] = 0.0
+                found = True
+                break
+        if not found:
+            del params[line]
+
+    return params
+
+def calc_relaxation():
+    """Calculate rotational relaxation rate for diagonal elements."""
+    return NotImplementedError
+
+def apply_env(line_params: dict, env: dict, to_nu: bool=False):
+    """Apply environment (p, T) dependency to line parameters."""
+    ret = {}
+    for k, v in line_params.items():
+        gam = EnvironmentDependency_Gamma0(v['gam'], env['T'], Tref, env['p'], 1.0, v['n_air'])
+        nu = v['nu'] + EnvironmentDependency_Delta0(v['del'], env['p'], 1.0)
+        if to_nu:
+            gam = u.wn2nu(gam)
+            nu = u.wn2nu(nu)
+        ret[k] = {'gam': gam, 'nu': nu}
+        if 'mu' in v:
+            ret[k]['mu'] = v['mu']
+
+    return ret
+
+# * For line-shape calculations
 def alpha2sw(alpha, conc):
     """Line strength from absoption coefficient and concentration.
 

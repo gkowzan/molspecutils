@@ -23,7 +23,7 @@ setup(
         'Programming Language :: Python :: 3 :: Only',
         'Topic :: Scientific/Engineering :: Physics'],
     python_requires='>=3.5',
-    install_requires=['numpy', 'scipy', 'xarray', 'matplotlib', 'pyfftw',
+    install_requires=['numpy', 'scipy', 'xarray', 'matplotlib', 'pyfftw', 'appdirs',
                       'shed @ git+ssh://git@gitlab.com/allisonlab/mdcs/shed.git@master'],
     packages=find_packages()
 )

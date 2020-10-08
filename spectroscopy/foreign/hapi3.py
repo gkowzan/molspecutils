@@ -1746,7 +1746,7 @@ def databaseBegin(db=None):
     else:
        VARIABLES['BACKEND_DATABASE_NAME'] = BACKEND_DATABASE_NAME_DEFAULT
     if not os.path.exists(VARIABLES['BACKEND_DATABASE_NAME']):
-       os.mkdir(VARIABLES['BACKEND_DATABASE_NAME'])
+       os.makedirs(VARIABLES['BACKEND_DATABASE_NAME'])
     loadCache()
 
 # DB backend level, end transaction
