@@ -71,7 +71,10 @@ def energy_levels(nus: list, M: int, I: int, db: str=hitran_cache):
 
 
 def equilibrium_pops(levels: dict, T: float, M: int, I: int):
-    """Calculate equilibrium populations at temperature T."""
+    """Calculate equilibrium populations at temperature T.
+
+    This is population summed over degenarate magnetic levels.
+    """
     kt = u.joule2wn(C.k*T)
     return {k: (2*k[1]+1)*np.exp(-v/kt)/PYTIPS(M, I, T) for k, v in levels.items()}
 
