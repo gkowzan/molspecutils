@@ -117,9 +117,12 @@ def line_params(bands: list, M: int, I: int, db: str=hitran_cache):
         llqs, As, gams, delts, nus, n_airs = h3.getColumns(dest_name, ParameterNames=param_list)
         for llq, a, gam, delt, nu, n_air in zip(llqs, As, gams, delts, nus, n_airs):
             jpp, jp = llq_to_pair(llq)
+            # mu = np.sqrt(a*(2*jp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
+            # See Eqs. (5.4) and (3.33) in rotsim2d_roadmap.pdf. `mu` here
+            # includes the Hönl-London factor, so it is actually sqrt(S_j2,j1/(2j_1+1))
+            # and not mu_j2,j1
+            # mu = np.sqrt(a*(2*jp+1)/(2*jpp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
             mu = np.sqrt(a*(2*jp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
-            # See Eq. 57 in rotsim2d_roadmap.pdf
-            mu = np.sqrt(a*(2*jp+1)/(2*jpp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
             params[((nupp, jpp), (nup, jp))] = {
                 'mu': mu, 'gam': gam, 'del': delt, 'n_air': n_air ,'nu': nu}
     return params
