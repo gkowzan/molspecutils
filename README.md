@@ -10,7 +10,7 @@ python -m pip install -e .
 or by installing directly from the repo with pip
 
 ``` sh
-python -m pip git+ssh://git@gitlab.com:allisonlab/mdcs/spectroscopy.git@master
+python -m pip install git+ssh://git@gitlab.com/allisonlab/mdcs/spectroscopy.git@master
 ```
 
 To use SQLAlchemy classes which are required for `rotsim2d` module, one needs
