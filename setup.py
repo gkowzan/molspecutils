@@ -22,8 +22,8 @@ setup(
         'License :: OSI Approved :: BSD License',
         'Programming Language :: Python :: 3 :: Only',
         'Topic :: Scientific/Engineering :: Physics'],
-    python_requires='>=3.5',
-    install_requires=['numpy', 'scipy', 'xarray', 'matplotlib', 'pyfftw', 'appdirs',
+    python_requires='>=3.7',
+    install_requires=['numpy', 'scipy', 'xarray', 'matplotlib', 'pyfftw', 'appdirs', 'sqlalchemy',
                       'shed @ git+ssh://git@gitlab.com/allisonlab/mdcs/shed.git@master'],
     packages=find_packages()
 )
