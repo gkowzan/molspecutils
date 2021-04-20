@@ -25,5 +25,6 @@ setup(
     python_requires='>=3.7',
     install_requires=['numpy', 'scipy', 'xarray', 'matplotlib', 'pyfftw', 'appdirs', 'sqlalchemy',
                       'shed @ git+ssh://git@gitlab.com/allisonlab/mdcs/shed.git@master'],
+    setup_requires=['wheel'],
     packages=find_packages()
 )
