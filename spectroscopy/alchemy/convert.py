@@ -3,7 +3,6 @@ from typing import Union
 from importlib import import_module
 from pathlib import Path
 from sqlalchemy import create_engine, select
-import sqlalchemy.exc as exc
 from sqlalchemy.orm import Session, selectinload
 import spectroscopy.happier as h
 
@@ -42,7 +41,7 @@ def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, over
     engine = create_engine("sqlite:///" + str(sql_path))
     molmod = import_module('spectroscopy.alchemy.'+mol_name)
     molmod.Base.metadata.create_all(engine)
-    
+
     with Session(engine) as session:
         for row in zip(*h.h3.getColumns(mol_name, ParameterNames)):
             llq, luq, glq, guq, nu, el, sw, a, gair, gself, dair, nair, gp, gpp = row
@@ -81,44 +80,3 @@ def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, over
                 continue
             session.add(line_params)
         session.commit()
-
-
-if __name__ == '__main__':
-    from sqlalchemy.orm import aliased
-    from sqlalchemy import and_
-    import spectroscopy.alchemy.CO as CO
-    nupp, nup = aliased(CO.VibState), aliased(CO.VibState)
-    jpp, jp = aliased(CO.RotState), aliased(CO.RotState)
-    rovpp, rovp = aliased(CO.RovibState), aliased(CO.RovibState)
-    sql_path = Path(h.hitran_cache) / 'CO.sqlite3'
-    engine = create_engine("sqlite:///" + str(sql_path))
-    with Session(engine) as session:
-        result = session.execute(
-            select(CO.LineParameters.gamma_air).join(CO.LineParameters.transition).\
-            join(rovpp, CO.TransitionPair.statepp).join(nupp, rovpp.nu).\
-            join(jpp, rovpp.j).\
-            join(rovp, CO.TransitionPair.statep).join(nup, rovp.nu).\
-            join(jp, rovp.j).filter(and_(jpp==CO.RotState(j=1), nupp.nu==0, jp.j==2, nup.nu==1))
-        ).scalars()
-        print(result.one())
-
-    with Session(engine) as session:
-        subjpp = select(CO.RotState.id).filter_by(j=1).scalar_subquery()
-        subnupp = select(CO.VibState.id).filter_by(nu=0).scalar_subquery()
-        subjp = select(CO.RotState.id).filter_by(j=2).scalar_subquery()
-        subnup = select(CO.VibState.id).filter_by(nu=1).scalar_subquery()
-        result = session.execute(
-            select(CO.LineParameters.gamma_air).join(CO.LineParameters.transition).\
-            join(rovpp, CO.TransitionPair.statepp).join(nupp, rovpp.nu).\
-            join(jpp, rovpp.j).\
-            join(rovp, CO.TransitionPair.statep).join(nup, rovp.nu).\
-            join(jp, rovp.j).\
-            where(jpp.id==subjpp, nupp.id==subnupp, jp.id==subjp, nup.id==subnupp)
-        ).scalars()
-        print(result.all())
-
-    with Session(engine) as session:
-        print(session.execute(
-            select(CO.RovibState.energy).join(CO.VibState).join(CO.RotState).\
-            where(CO.VibState.nu==0, CO.RotState.j==1)
-        ).scalars().all())
