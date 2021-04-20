@@ -32,6 +32,46 @@ cBolts = 1.380648813E-16
 Tref = 296.0
 
 # * Retrieve molecular data from HITRAN
+def molname2molid(molname: str) -> int:
+    for v in h3.ISO_ID.values():
+        if v[5] == molname:
+            return v[0]
+
+digits = [str(x) for x in range(1, 10)]
+
+def CH3Cl_nu_to_dict(snu):
+    if snu[0] in digits:
+        return {'nu'+snu[2]: int(snu[0])}
+    else:
+        return {'nu'+snu[1]: 1}
+
+
+def CH3Cl_gq_to_dict(gq):
+    """Convert global quanta to dict."""
+    gdict = dict(nu1=0, nu2=0, nu3=0, nu4=0, nu5=0, nu6=0)
+    gq = gq.strip()
+    if not gq == 'GROUND':
+        if '+' in gq:
+            nuf, nul = gq.split('+')
+            gdict.update(CH3Cl_nu_to_dict(nuf))
+            gdict.update(CH3Cl_nu_to_dict(nul))
+        else:
+            gdict.update(CH3Cl_nu_to_dict(gq))
+
+    return gdict
+
+
+def CH3Cl_lq_to_dict(lq):
+    """Convert local quanta to dict."""
+    fstring = lq[11:].strip()
+    if fstring:
+        f = float(fstring)
+    else:
+        f = 0.0
+    return dict(j=int(lq[:3].strip()), k=int(lq[3:6].strip()),
+                l=int(lq[6:8].strip()), sym=lq[8:10].strip(),
+                f=f)
+            
 
 def CO_llq_to_pair(llq):
     """Convert `local_lower_quanta` string to (Jpp, Jp)."""
