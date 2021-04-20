@@ -1,15 +1,29 @@
-"""Auxilliary functions extending the HAPI library.
-"""
+"""Auxilliary functions extending the HAPI library. """
 # * Imports and constants
 from pathlib import Path
+import sys
+import importlib.util
 import re
 import appdirs
 import numpy as np
 import scipy.constants as C
-import spectroscopy.foreign.hapi3 as h3
 from spectroscopy.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
                                       TIPS_NPT)
 import shed.units as u
+
+def lazy(fullname):
+  try:
+    return sys.modules[fullname]
+  except KeyError:
+    spec = importlib.util.find_spec(fullname)
+    module = importlib.util.module_from_spec(spec)
+    loader = importlib.util.LazyLoader(spec.loader)
+    # Make module with proper locking and get it inserted into sys.modules.
+    loader.exec_module(module)
+    return module
+
+#: Lazy import of hapi3
+h3 = lazy('spectroscopy.foreign.hapi3')
 
 dirs = appdirs.AppDirs('happier', 'gkowzan')
 hitran_cache = str(Path(dirs.user_cache_dir) / 'db')
