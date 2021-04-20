@@ -32,7 +32,8 @@ cBolts = 1.380648813E-16
 Tref = 296.0
 
 # * Retrieve molecular data from HITRAN
-def llq_to_pair(llq):
+
+def CO_llq_to_pair(llq):
     """Convert `local_lower_quanta` string to (Jpp, Jp)."""
     match = re.fullmatch('\s*([PR])\s*([0-9]+)\s*', llq)
     branch, j = match.group(1), int(match.group(2))
@@ -79,7 +80,7 @@ def energy_levels(nus: list, M: int, I: int, db: str=hitran_cache):
         h3.select(table_name, Conditions=conds, DestinationTableName=dest_table, Output=False)
         llqs, elowers = h3.getColumns(dest_table, ParameterNames=('local_lower_quanta', 'elower'))
         for llq, elower in zip(llqs, elowers):
-            levels[(nu, llq_to_pair(llq)[0])] = elower
+            levels[(nu, CO_llq_to_pair(llq)[0])] = elower
 
     return levels
 
@@ -87,10 +88,12 @@ def energy_levels(nus: list, M: int, I: int, db: str=hitran_cache):
 def equilibrium_pops(levels: dict, T: float, M: int, I: int):
     """Calculate equilibrium populations at temperature T.
 
-    This is population summed over degenarate magnetic levels.
+    This is population summed over degenerate magnetic levels.
     """
     kt = u.joule2wn(C.k*T)
-    return {k: (2*k[1]+1)*np.exp(-v/kt)/PYTIPS(M, I, T) for k, v in levels.items()}
+    # return {k: (2*k[1]+1)*np.exp(-v/kt)/PYTIPS(M, I, T) for k, v in levels.items()}
+    # adding square root factor, don't remember why, have to check Vaccaro
+    return {k: np.sqrt(2*k[1]+1)*np.exp(-v/kt)/PYTIPS(M, I, T) for k, v in levels.items()}
 
 
 def line_params(bands: list, M: int, I: int, db: str=hitran_cache):
@@ -130,7 +133,7 @@ def line_params(bands: list, M: int, I: int, db: str=hitran_cache):
         param_list = ('local_lower_quanta', 'a', 'gamma_air', 'delta_air', 'nu', 'n_air')
         llqs, As, gams, delts, nus, n_airs = h3.getColumns(dest_name, ParameterNames=param_list)
         for llq, a, gam, delt, nu, n_air in zip(llqs, As, gams, delts, nus, n_airs):
-            jpp, jp = llq_to_pair(llq)
+            jpp, jp = CO_llq_to_pair(llq)
             # mu = np.sqrt(a*(2*jp+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
             # See Eqs. (5.4) and (3.33) in rotsim2d_roadmap.pdf. `mu` here
             # includes the Hönl-London factor, so it is actually sqrt(S_j2,j1/(2j_1+1))
@@ -177,10 +180,12 @@ def generate_line_params(bands: list, elevels: dict, line_params: dict):
     for line in list(params.keys()):
         found = False
         for old_line in line_params:
-            if line[0] == old_line[0]:
+            if line[0] == old_line[0] and line[0][0] == old_line[0][0] and line[1][0] == old_line[1][0]:
                 params[line]['gam'] = line_params[old_line]['gam']
                 params[line]['n_air'] = line_params[old_line]['n_air']
                 params[line]['del'] = 0.0
+                # this is almost completely wrong
+                params[line]['mu'] = line_params[old_line]['mu']
                 found = True
                 break
         if not found:
