@@ -13,7 +13,7 @@ or by installing directly from the repo with pip
 python -m pip git+ssh://git@gitlab.com:allisonlab/mdcs/spectroscopy.git@master
 ```
 
-To use SQLAlchemy classes which are required for `rotsim2d` molecule, one needs
+To use SQLAlchemy classes which are required for `rotsim2d` module, one needs
 to execute the `spectroscopy/scripts/initialize_dbs.py` script to download
 spectroscopic data and fill the local database.
 
