@@ -10,6 +10,7 @@ import scipy.constants as C
 from shed.units import wn2nu, nu2wn
 
 DATA_DIR = str(Path.home() / 'documents/nauka/cs/hitran2012')
+DATA_DIR = '/mnt/d/cs/hitran2012'
 
 c = C.c
 N_A = C.N_A
