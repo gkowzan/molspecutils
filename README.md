@@ -13,3 +13,5 @@ or by installing directly from the repo with pip
 python -m pip git+ssh://git@gitlab.com:allisonlab/mdcs/spectroscopy.git@master
 ```
 
+# TODO
+- add more constraints to the database
