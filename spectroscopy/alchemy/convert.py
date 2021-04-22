@@ -32,11 +32,20 @@ def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, over
     mol_id = h.molname2molid(mol_name)
     h.h3.db_begin(cache)
     if overwrite_hitran:
-        hapi_path.unlink(missing_ok=True)
-        hapi_path.with_suffix('.header').unlink(missing_ok=True)
+        try:
+            hapi_path.unlink(missing_ok=True)
+        except FileNotFoundError:
+            pass
+        try:
+            hapi_path.with_suffix('.header').unlink(missing_ok=True)
+        except FileNotFoundError:
+            pass
         h.h3.fetch(mol_name, mol_id, 1, 0, 20000.0, ParameterGroups=['160-char', 'Labels'])
     if overwrite_alchemy:
-        sql_path.unlink(missing_ok=True)
+        try:
+            sql_path.unlink(missing_ok=True)
+        except FileNotFoundError:
+            pass
 
     engine = create_engine("sqlite:///" + str(sql_path))
     molmod = import_module('spectroscopy.alchemy.'+mol_name)
