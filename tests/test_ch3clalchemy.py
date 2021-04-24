@@ -1,9 +1,9 @@
 from pathlib import Path
 from sqlalchemy.orm import Session, selectinload, aliased
 from sqlalchemy import create_engine, select
-import spectroscopy.happier as h
-from spectroscopy.molecule import CH3ClAlchemyMode, SymTopState
-from spectroscopy.alchemy import CH3Cl
+import molspecutils.happier as h
+from molspecutils.molecule import CH3ClAlchemyMode, SymTopState
+from molspecutils.alchemy import CH3Cl
 
 sql_path = Path(h.hitran_cache) / 'CH3Cl.sqlite3'
 engine = create_engine("sqlite:///" + str(sql_path))

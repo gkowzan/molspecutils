@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine, select
-from spectroscopy.molecule import CH3ClAlchemyMode, SymTopState
-from spectroscopy.alchemy.meta import hitran_cache
+from molspecutils.molecule import CH3ClAlchemyMode, SymTopState
+from molspecutils.alchemy.meta import hitran_cache
 plt.ion()
 
 sql_path = Path(hitran_cache) / 'CH3Cl.sqlite3'

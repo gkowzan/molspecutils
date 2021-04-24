@@ -1,7 +1,7 @@
 from sqlalchemy.orm import registry, relationship
 from sqlalchemy import Column, Integer, String, ForeignKey, Float
-from spectroscopy.alchemy.meta import RovibMixin, TransitionMixin, BaseMixin, LineMixin
-from spectroscopy.happier import CH3Cl_gq_to_dict, CH3Cl_lq_to_dict
+from molspecutils.alchemy.meta import RovibMixin, TransitionMixin, BaseMixin, LineMixin
+from molspecutils.happier import CH3Cl_gq_to_dict, CH3Cl_lq_to_dict
 
 mapper_registry = registry()
 Base = mapper_registry.generate_base(cls=BaseMixin)

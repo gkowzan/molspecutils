@@ -1,8 +1,8 @@
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
-import spectroscopy.happier as h
-from spectroscopy.molecule import COAlchemyMode, DiatomState
+import molspecutils.happier as h
+from molspecutils.molecule import COAlchemyMode, DiatomState
 
 sql_path = Path(h.hitran_cache) / 'CO.sqlite3'
 engine = create_engine("sqlite:///" + str(sql_path))

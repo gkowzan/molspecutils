@@ -7,9 +7,9 @@ import re
 import appdirs
 import numpy as np
 import scipy.constants as C
-from spectroscopy.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
+from molspecutils.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
                                       TIPS_NPT)
-import shed.units as u
+import knickknacks.units as u
 
 def lazy(fullname):
   try:
@@ -23,7 +23,7 @@ def lazy(fullname):
     return module
 
 #: Lazy import of hapi3
-h3 = lazy('spectroscopy.foreign.hapi3')
+h3 = lazy('molspecutils.foreign.hapi3')
 
 dirs = appdirs.AppDirs('happier', 'gkowzan')
 hitran_cache = str(Path(dirs.user_cache_dir) / 'db')

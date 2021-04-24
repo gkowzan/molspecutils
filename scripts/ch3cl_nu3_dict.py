@@ -5,9 +5,9 @@ dict will be indexed by SymTopState instances."""
 from pathlib import Path
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import aliased, Session, selectinload
-import spectroscopy.happier as h
-from spectroscopy.alchemy import CH3Cl
-from spectroscopy.molecule import SymTopState
+import molspecutils.happier as h
+from molspecutils.alchemy import CH3Cl
+from molspecutils.molecule import SymTopState
 
 # * DBs
 input_path = Path(h.hitran_cache) / 'CH3Cl.sqlite3'

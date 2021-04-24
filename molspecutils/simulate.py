@@ -8,7 +8,7 @@ import scipy.constants as C
 from scipy.stats import linregress
 from scipy.signal import detrend
 from scipy.misc import derivative
-from shed.experiment import find_index
+from knickknacks.experiment import find_index
 import pyfftw.interfaces.scipy_fftpack as fftp
 
 

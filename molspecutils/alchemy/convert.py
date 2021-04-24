@@ -4,7 +4,7 @@ from importlib import import_module
 from pathlib import Path
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, selectinload
-import spectroscopy.happier as h
+import molspecutils.happier as h
 
 ParameterNames = ('local_lower_quanta', 'local_upper_quanta', 'global_lower_quanta',
                   'global_upper_quanta', 'nu', 'elower', 'sw', 'a', 'gamma_air',
@@ -48,7 +48,7 @@ def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, over
             pass
 
     engine = create_engine("sqlite:///" + str(sql_path))
-    molmod = import_module('spectroscopy.alchemy.'+mol_name)
+    molmod = import_module('molspecutils.alchemy.'+mol_name)
     molmod.Base.metadata.create_all(engine)
 
     with Session(engine) as session:
@@ -89,3 +89,13 @@ def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, over
                 continue
             session.add(line_params)
         session.commit()
+
+
+def first_run():
+    Path(h.hitran_cache).mkdir(parents=True, exist_ok=True)
+
+    print("Fetching and converting CO data...")
+    convert('CO', h.hitran_cache, True, True)
+
+    print("Fetching and converting CH3Cl data (this might take a while)...")
+    convert('CH3Cl', h.hitran_cache, True, True)

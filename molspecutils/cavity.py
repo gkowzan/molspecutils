@@ -2,7 +2,7 @@
 from typing import List, Set, Dict, Tuple, Optional, Callable, Union
 import numpy as np
 import scipy.constants as C
-from shed.units import wn2lambda
+from knickknacks.units import wn2lambda
 np_float = Union[float, np.ndarray]
 
 #######################################################################

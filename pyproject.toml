@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "molspecutils"
+version = "0.1.0"
+description = "Modules for (cavity-enhanced) high-resolution molecular spectroscopy"
+authors = ["Grzegorz Kowzan <grzegorz@kowzan.eu>"]
+readme = "README.md"
+homepage = "https://gitlab.com/allisonlab/mdcs/molspecutils"
+repository = "https://gitlab.com/allisonlab/mdcs/molspecutils"
+classifiers=[
+	'Development Status :: 3 - Alpha',
+        'Environment :: Console',
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Physics']
+include = ['README.md']
+
+[tool.poetry.scripts]
+molspecutils_init = "molspecutils.alchemy.convert:first_run"
+
+[tool.poetry.dependencies]
+python = ">=3.7,<3.10"
+numpy = "^1.20.1"
+scipy = "^1.6.2"
+xarray = "^0.17.0"
+pyFFTW = "^0.12.0"
+appdirs = "^1.4.4"
+matplotlib = "^3.3.4"
+SQLAlchemy = "^1.4.6"
+knickknacks = {version="^0.1.0", allow-prereleases = true}
+
+[[tool.poetry.source]]
+name = "local"
+url = "http://127.0.0.1:4040/simple/"
+
+[[tool.poetry.source]]
+name = "allisonlab"
+url = "https://gitlab.com/api/v4/projects/26140156/packages/pypi"
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "wheel"]
+build-backend = "poetry.core.masonry.api"
