@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Modules for (cavity-enhanced) high-resolution molecular spectroscopy"
 authors = ["Grzegorz Kowzan <grzegorz@kowzan.eu>"]
 readme = "README.md"
-homepage = "https://gitlab.com/allisonlab/mdcs/molspecutils"
-repository = "https://gitlab.com/allisonlab/mdcs/molspecutils"
+homepage = "https://gitlab.com/allisonlab/mdcs/spectroscopy"
+repository = "https://gitlab.com/allisonlab/mdcs/spectroscopy"
 classifiers=[
 	'Development Status :: 3 - Alpha',
         'Environment :: Console',
@@ -17,15 +17,19 @@ include = ['README.md']
 molspecutils_init = "molspecutils.alchemy.convert:first_run"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<3.10"
-numpy = "^1.20.1"
-scipy = "^1.6.2"
-xarray = "^0.17.0"
+python = ">=3.7,<3.9"
+numpy = "^1.16.5"
+scipy = "^1.3"
+xarray = "^0.11.0"
 pyFFTW = "^0.12.0"
 appdirs = "^1.4.4"
 matplotlib = "^3.3.4"
 SQLAlchemy = "^1.4.6"
 knickknacks = {version="^0.1.0", allow-prereleases = true}
+
+[tool.poetry.dev-dependencies]
+python-language-server = { version="*", extras = ["all"] }
+pytest = "*"
 
 [[tool.poetry.source]]
 name = "local"
