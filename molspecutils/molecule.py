@@ -1,15 +1,17 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
 from typing import Tuple
+from pathlib import Path
 import abc
 from collections import namedtuple
 import numpy as np
 import scipy.constants as C
 from sqlalchemy.orm import aliased, selectinload, Session
-from sqlalchemy import select
+from sqlalchemy import select, create_engine
 import knickknacks.units as u
 import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl as CH3Cl
+from molspecutils.alchemy.meta import hitran_cache
 
 class RotState(abc.ABC):
     pass
@@ -125,7 +127,9 @@ class AlchemyModeMixin:
 
 
 class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
-    def __init__(self, engine):
+    def __init__(self, engine=None):
+        if engine is None:
+            engine = create_engine("sqlite:///" + str(Path(hitran_cache) / 'CH3Cl.sqlite3'))
         self._generate_dicts(engine)
 
     def _generate_dicts(self, engine):
@@ -176,7 +180,9 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
 
 class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
-    def __init__(self, engine):
+    def __init__(self, engine=None):
+        if engine is None:
+            engine = create_engine("sqlite:///" + str(Path(hitran_cache) / 'CO.sqlite3'))
         self._generate_dicts(engine)
 
     def _generate_dicts(self, engine):
