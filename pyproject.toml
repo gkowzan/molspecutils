@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "molspecutils"
-version = "0.1.0"
+version = "0.1.1"
 description = "Modules for (cavity-enhanced) high-resolution molecular spectroscopy"
 authors = ["Grzegorz Kowzan <grzegorz@kowzan.eu>"]
 readme = "README.md"
