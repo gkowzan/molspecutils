@@ -3,7 +3,6 @@
 # Functions which should logically accept frequencies or wavelengths accept frequencies in Hz. Functions returning amplitudes or powers return appropriately normalized spectral densities.  Time is expressed in seconds.
 # * Imports
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.constants as C
 from scipy.stats import linregress
 from scipy.signal import detrend
@@ -22,6 +21,7 @@ def carrier_freq(interf: np.ndarray, debug: bool=False):
     regres = linregress(ix, iph)
 
     if debug:
+        import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
         ax.plot(ix, regres.slope*ix+regres.intercept)
         ax.plot(iph, 'o', ms=1)
