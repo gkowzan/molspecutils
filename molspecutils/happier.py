@@ -2,6 +2,7 @@
 # * Imports and constants
 from pathlib import Path
 import sys
+from collections import namedtuple
 import importlib.util
 import re
 import appdirs
@@ -32,6 +33,9 @@ cBolts = 1.380648813E-16
 Tref = 296.0
 
 # * Retrieve molecular data from HITRAN
+HITRANRow = namedtuple("HITRANRow", "llq, luq, glq, guq, nu, el, sw, a, gair, gself, dair, nair, gp, gpp")
+
+
 def molname2molid(molname: str) -> int:
     for v in h3.ISO_ID.values():
         if v[5] == molname:
