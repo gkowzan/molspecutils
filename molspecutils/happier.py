@@ -9,7 +9,7 @@ import numpy as np
 import scipy.constants as C
 from molspecutils.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
                                       TIPS_NPT)
-import knickknacks.units as u
+import molspecutils.utils as u
 
 def lazy(fullname):
   try:

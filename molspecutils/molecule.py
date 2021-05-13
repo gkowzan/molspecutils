@@ -7,7 +7,7 @@ import numpy as np
 import scipy.constants as C
 from sqlalchemy.orm import aliased, selectinload, Session
 from sqlalchemy import select, create_engine
-import knickknacks.units as u
+import molspecutils.utils as u
 import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl as CH3Cl

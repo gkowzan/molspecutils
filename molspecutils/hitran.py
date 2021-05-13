@@ -7,7 +7,7 @@ from functools import lru_cache
 import numpy as np
 from scipy.special import erfcx
 import scipy.constants as C
-from knickknacks.units import wn2nu, nu2wn
+from molspecutils.utils import wn2nu, nu2wn
 
 DATA_DIR = str(Path.home() / 'documents/nauka/cs/hitran2012')
 DATA_DIR = '/mnt/d/cs/hitran2012'
