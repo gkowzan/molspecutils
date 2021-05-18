@@ -7,10 +7,12 @@ import numpy as np
 import scipy.constants as C
 from sqlalchemy.orm import aliased, selectinload, Session
 from sqlalchemy import select, create_engine
+from sqlalchemy.engine import Engine
 import molspecutils.utils as u
 import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
-import molspecutils.alchemy.CH3Cl as CH3Cl
+import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
+from molspecutils.alchemy.convert import get
 from molspecutils.alchemy.meta import hitran_cache
 
 class RotState(abc.ABC):
@@ -127,38 +129,64 @@ class AlchemyModeMixin:
 
 
 class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
-    def __init__(self, engine=None):
-        if engine is None:
-            engine = create_engine("sqlite:///" + str(Path(hitran_cache) / 'CH3Cl.sqlite3'))
-        self._generate_dicts(engine)
+    def __init__(self, engine_or_path=None, iso=1):
+        """Provide transition and energy level data of nu3 mode.
 
-    def _generate_dicts(self, engine):
-        self.elevels, self.lines = {}, {}
-        rovpp, rovp = aliased(CH3Cl.RovibState), aliased(CH3Cl.RovibState)
-        nupp, nup = aliased(CH3Cl.VibState), aliased(CH3Cl.VibState)
+        If `engine_or_path` is a directory, then it will be searched for sqlite3
+        database with appropriate structure (see
+        :mod:`molspecutils.alchemy.CH3Cl`). If not present, it will search for
+        HAPI db file `CH3Cl_nu3_<iso>.data` and attempt to extract the
+        data and put it in sqlite3 db. If neither is present, it will fetch the
+        data from HITRAN first. If `engine_or_path` is None, it will do the
+        above for default user cache directory. If `engine_or_path` is a
+        :class:`sqlalchemy.Engine` instance, it will be assumed to contain the
+        required molecular data.
 
-        with Session(bind=engine) as session:
-            input_result = session.execute(
-                select(CH3Cl.LineParameters).options(selectinload('*'))\
-                .join(CH3Cl.LineParameters.transition)\
-                .join(rovpp, rovpp.id==CH3Cl.TransitionPair.statepp_id)\
-                .join(rovp, rovp.id==CH3Cl.TransitionPair.statep_id)\
-                .join(nupp, nupp.id==rovpp.nu_id).join(nup, nup.id==rovp.nu_id).
-                where(nupp.nu1==0, nupp.nu2==0, nupp.nu4==0, nupp.nu5==0, nupp.nu6==0,
-                      nup.nu1==0, nup.nu2==0, nup.nu4==0, nup.nu5==0, nup.nu6==0)).scalars()
-            for lp in input_result:
-                alch_statepp = lp.transition.statepp
-                alch_statep = lp.transition.statep
-                if alch_statepp.j.f != 0.0 or alch_statep.j.f != 0.0:
-                    continue
-                statepp = SymTopState(nu=alch_statepp.nu.nu3, j=alch_statepp.j.j,
-                                      k=alch_statepp.j.k)
-                statep = SymTopState(nu=alch_statep.nu.nu3, j=alch_statep.j.j,
-                                     k=alch_statep.j.k)
+        Parameters
+        ----------
+        engine_or_path
+            Path to directory with HAPI or sqlite3 database or
+            :class:`sqlachemy.Engine` instance of opened sqlite3 database.
+        iso
+            Isotopologue number, 1 for 35Cl and 2 for 37Cl. Required for
+            fetching data and calculating appropriate total partition function.
+        """
+        if isinstance(engine_or_path, Engine):
+            engine = engine_or_path
+        else:
+            engine = get(engine_or_path, 'CH3Cl_nu3', iso)
 
-                self.lines[(statepp, statep)] = dict(A=lp.A, gamma=lp.gamma_air, delta=lp.delta_air)
-                self.elevels[statepp] = alch_statepp.energy
-                self.elevels[statep] = alch_statep.energy
+        self._iso = iso
+        self._generate_elevels(engine)
+        self._generate_lines(engine)
+
+    def _generate_elevels(self, engine: Engine):
+        self.elevels = {}
+        with engine.begin() as conn:
+            st = CH3Cl_nu3.states
+            result = conn.execute(
+                select(st.c.energy, st.c.nu3, st.c.J, st.c.K))
+            for row in result:
+                self.elevels[SymTopState(*row[1:])] = row[0]
+
+    def _generate_lines(self, engine: Engine):
+        self.lines = {}
+        with engine.begin() as conn:
+            lp = CH3Cl_nu3.line_parameters
+            statepp = CH3Cl_nu3.states.alias()
+            statep = CH3Cl_nu3.states.alias()
+            result = conn.execute(
+                select(lp.c.a, lp.c.gair, lp.c.dair,
+                       statepp.c.nu3, statepp.c.J, statepp.c.K,
+                       statep.c.nu3, statep.c.J, statep.c.K).\
+                join_from(lp, statepp, lp.c.statepp==statepp.c.id).\
+                join_from(lp, statep, lp.c.statep==statep.c.id))
+
+            for row in result:
+                spp = SymTopState(*row[3:6])
+                sp = SymTopState(*row[6:9])
+                self.lines[(spp, sp)] = dict(
+                    zip(['A', 'gamma', 'delta'], row[:3]))
 
     def mu(self, pair: Tuple[RotState]):
         params, _ = self.line_params(pair)
@@ -180,128 +208,85 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
 
 class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
-    def __init__(self, engine=None):
-        if engine is None:
-            engine = create_engine("sqlite:///" + str(Path(hitran_cache) / 'CO.sqlite3'))
-        self._generate_dicts(engine)
+    def __init__(self, engine_or_path=None, iso=1):
+        """Provide transition and energy level data for CO.
 
-    def _generate_dicts(self, engine):
-        self.elevels, self.lines = {}, {}
+        Parameters
+        ----------
+        engine_or_path
+            Path to directory with HAPI or sqlite3 database or
+            :class:`sqlachemy.Engine` instance of opened sqlite3 database.
+        iso
+            Isotopologue number. Required for fetching data and calculating
+            appropriate total partition function.
+        """
+        if isinstance(engine_or_path, Engine):
+            engine = engine_or_path
+        else:
+            engine = get(engine_or_path, 'CO', iso)
 
-        with Session(bind=engine) as session:
-            input_result = session.execute(
-                select(CO.LineParameters).options(selectinload('*'))).scalars()
-            for lp in input_result:
-                alch_statepp = lp.transition.statepp
-                alch_statep = lp.transition.statep
-                statepp = DiatomState(nu=alch_statepp.nu.nu, j=alch_statepp.j.j)
-                statep = DiatomState(nu=alch_statep.nu.nu, j=alch_statep.j.j)
+        self._iso = iso
+        self._generate_lines(engine)
+        self._generate_elevels(engine)
 
-                self.lines[(statepp, statep)] = dict(A=lp.A, gamma=lp.gamma_air, delta=lp.delta_air)
-                self.elevels[statepp] = alch_statepp.energy
-                self.elevels[statep] = alch_statep.energy
+    def _generate_lines(self, engine: Engine):
+        self.lines = {}
+        with engine.begin() as conn:
+            lp = CO.line_parameters
+            statepp = CO.states.alias()
+            statep = CO.states.alias()
+            result = conn.execute(
+                select(lp.c.a, lp.c.gair, lp.c.dair,
+                       statepp.c.nu, statepp.c.J,
+                       statep.c.nu, statep.c.J).\
+                join_from(lp, statepp, lp.c.statepp==statepp.c.id).\
+                join_from(lp, statep, lp.c.statep==statep.c.id))
+
+            for row in result:
+                spp = DiatomState(*row[3:5])
+                sp = DiatomState(*row[5:7])
+                self.lines[(spp, sp)] = dict(
+                    zip(['A', 'gamma', 'delta'], row[:3]))
+
+    def _generate_elevels(self, engine: Engine):
+        self.elevels = {}
+        with engine.begin() as conn:
+            st = CO.states
+            result = conn.execute(
+                select(st.c.energy, st.c.nu, st.c.J))
+            for row in result:
+                self.elevels[DiatomState(*row[1:])] = row[0]
 
     def mu(self, pair: Tuple[RotState]):
+        r"""Reduced matrix element for the `pair` transitions.
+
+        Obtained from HITRAN's Einsten A-coefficient:
+
+        .. math::
+
+            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+        """
         params, _ = self.line_params(pair)
         if params is None:
             print(pair)
         A = params['A']
         nu = abs(self.nu(pair))
+        if _ == 1:
+            j = pair[1].j
+        elif _ == -1:
+            j = pair[0].j
         # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
         # Eq. (5.9) from rotsim2d_roadmap
-        rmu = np.sqrt(A*C.epsilon_0*C.h*C.c**3*(2*pair[1].j+1)/(16*np.pi**3*nu**3)) 
+        rmu = np.sqrt(A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
 
         return rmu
 
     def equilibrium_pop(self, state: RotState, T: float):
+        r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
+        :math:`e^{-E_{\nu,j}/kT}/Q`.
+        """
         kt = u.joule2wn(C.k*T)
         e = self.elevels[state]
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-
-
-# class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
-#     def _line_params(self, pair: Tuple[RotState]):
-#         """Returns a tuple of (nu, A, gamma_air, delta_air).
-
-#         Don't return the whole LineParameters object for performance reasons."""
-#         nupp, nup = aliased(CO.VibState), aliased(CO.VibState)
-#         jpp, jp = aliased(CO.RotState), aliased(CO.RotState)
-#         rovpp, rovp = aliased(CO.RovibState), aliased(CO.RovibState)
-        
-#         subjpp = select(CO.RotState.id).filter_by(j=pair[0].j).scalar_subquery()
-#         subnupp = select(CO.VibState.id).filter_by(nu=pair[0].nu).scalar_subquery()
-#         subjp = select(CO.RotState.id).filter_by(j=pair[1].j).scalar_subquery()
-#         subnup = select(CO.VibState.id).filter_by(nu=pair[1].nu).scalar_subquery()
-
-#         result = self.sess.execute(
-#             select(CO.LineParameters.nu, CO.LineParameters.A, CO.LineParameters.gamma_air,
-#                    CO.LineParameters.delta_air).options(selectinload('*')).\
-#             join(CO.LineParameters.transition).\
-#             join(rovpp, CO.TransitionPair.statepp).join(nupp, rovpp.nu).\
-#             join(jpp, rovpp.j).\
-#             join(rovp, CO.TransitionPair.statep).join(nup, rovp.nu).\
-#             join(jp, rovp.j).\
-#             where(jpp.id==subjpp, nupp.id==subnupp, jp.id==subjp, nup.id==subnup)
-#         ).one_or_none()
-
-#         return result
-        
-#     def _fake_gamma(self, pair: Tuple[RotState]):
-#         return self.sess.execute(
-#             select(CO.LineParameters.gamma_air).join(CO.LineParameters.transition).\
-#             join(CO.TransitionPair.statepp).join(CO.RovibState.j).join(CO.RovibState.nu).\
-#             where(CO.RotState.j==pair[0].j, CO.VibState.nu==pair[0].nu)
-#         ).scalars().first()
-    
-#     def _state_energy(self, session, state):
-#         return session.execute(
-#             select(CO.RovibState.energy).join(CO.VibState).join(CO.RotState).\
-#             where(CO.VibState.nu==state.nu, CO.RotState.j==state.j)
-#         ).scalars().one()
-
-#     # def nu(self, pair: Tuple[RotState]):
-#     #     params, sign = self.line_params(pair)
-#     #     nu = params.nu
-#     #     if self.frequency:
-#     #         nu = u.wn2nu(nu)
-
-#     #     return nu
-
-#     def mu(self, pair: Tuple[RotState]):
-#         params, sign = self.line_params(pair)
-#         nu, A = params[:2]
-#         rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*u.wn2nu(nu))**3)
-
-#         return rmu
-
-#     def equilibrium_pop(self, state: RotState, T: float):
-#         kt = u.joule2wn(C.k*T)
-#         e = self._state_energy(self.sess, state)
-
-#         return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-    
-# class Manifold:
-#     def __init__(self, origin: float, B: float, C: float,
-#                  D: float=0.0, DJK: float=0.0, DK:float =0.0,
-#                  HJ: float=0.0, HJK: float=0.0, HKJ: float=0.0,
-#                  HK: float=0.0):
-#         self.origin = origin
-#         self.B = B
-#         self.C = C              # A or C
-#         self.D = D
-#         self.DJK = DJK
-#         self.DK = DK
-#         self.HJ = HJ
-#         self.HJK = HJK
-#         self.HKJ = HKJ
-#         self.HK = HK
-
-#     def energy(self, J: int, K: int):
-#         if K>J:
-#             return ValueError("K cannot be larger than J!")
-#         JJ1 = J*(J+1)
-#         return self.origin + self.B*JJ1 + (self.C-self.B)*K**2\
-#             - self.DJ*JJ1**2 - self.DK*K**4 - self.DJK*JJ1*K**2\
-#             + self.HJ*JJ1**3 + self.HK*K**6 + self.HJK*JJ**2*K**2 + self.HKJ*JJ1*K**4
+        return np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)

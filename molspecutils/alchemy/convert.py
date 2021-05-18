@@ -1,9 +1,20 @@
+"""Store molecular data extracted from HITRAN in an sqlite3 database.
+
+1. If HITRAN .par/.data file is not present then fetch it with HAPI.
+2. If HITRAN file is present but sqlite3 db isn't, then initialize the database
+   and populate it. If HITRAN file path is not provided then look for it under
+   $XDG_DATA_CACHE/happier/db.
+3. If sqlite3 DB is present, then load it whole into memory for faster access.
+
+The main function is :func:`get` which does all these steps if necessary and
+returns :class:`sqlalchemy.Engine.engine` instance for the sql databse.
+"""
 # * Imports
 from typing import Union, Sequence
 from types import ModuleType
 from importlib import import_module
 from pathlib import Path
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, insert
 from sqlalchemy.orm import Session, selectinload
 import molspecutils.happier as h
 import molspecutils.mirs as mirs
@@ -14,157 +25,85 @@ ParameterNames = ('local_lower_quanta', 'local_upper_quanta', 'global_lower_quan
                   'gamma_self', 'delta_air', 'n_air', 'gp', 'gpp')
 
 # * Functions
-def only_jnu(cls, kwargs):
-    if cls.__name__ == 'RovibState':
-        return dict(j=kwargs['j'], nu=kwargs['nu'])
-    else:
-        return kwargs
+def fetch(hapi_path, molecule_mode, iso):
+    try:
+        hapi_path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+    try:
+        hapi_path.with_suffix('.header').unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
 
-def add_or_create(session, cls, kwargs):
-    obj = session.execute(select(cls).filter_by(**only_jnu(cls, kwargs))).scalars().one_or_none()
-    if obj is None:
-        obj = cls(**kwargs)
-        session.add(obj)
-    return obj
-
-def convert(mol_name: str, cache: Union[str, Path], overwrite_hitran=False, overwrite_alchemy=False):
-
-def convert_mirs_single(molmod: ModuleType, session: Session, fpath: Union[str, Path]):
-    """Add transition data from MIRS file to DB."""
-    with open(fpath, 'r') as f:
-        for line in f:
-            row = mirs.parse_prd_row(line)
-            rotppd, rotpd = mirs.rot_kwargs(row)
-            vibppd, vibpd = mirs.vib_kwargs(row)
-
-            rotpp_state = add_or_create(session, molmod.RotState, rotppd)
-            rotp_state = add_or_create(session, molmod.RotState, rotpd)
-
-            vibpp_state = add_or_create(session, molmod.VibState, vibppd)
-            vibp_state = add_or_create(session, molmod.VibState, vibpd)
-
-            rovibpp_state = add_or_create(
-                session, molmod.RovibState, dict(j=rotpp_state, nu=vibpp_state,
-                                                 energy=row.elower, g=1))
-            rovibp_state = add_or_create(
-                session, molmod.RovibState, dict(j=rotp_state, nu=vibp_state,
-                                                 energy=row.elower+row.nu, g=1))
-
-            transition_pair = add_or_create(
-                session, molmod.TransitionPair, dict(statepp=rovibpp_state, statep=rovibp_state))
-
-            line_params = molmod.LineParameters(
-                nu=row.nu, sw=row.sw, A=row.sw, gamma_air=0.7, gamma_self=0.7, n_air=0.7, delta_air=0.0,
-                transition=transition_pair)
-            result = session.execute(
-                    select(molmod.LineParameters).options(selectinload('*'))\
-                    .where(molmod.LineParameters.transition==transition_pair)
-            ).scalars().one_or_none()
-            if result is not None:
-                print('Skipping duplicate:')
-                print(line_params)
-                print('HITRAN row:', row)
-                # print('state fragment', ''.join([guq, glq, luq, llq]))
-                print('of')
-                print(result, '\n')
-                continue
-            session.add(line_params)
+    molname = molecule_mode.split('_')[0]
+    h.h3.db_begin(str(hapi_path.parent))
+    h.h3.fetch(molecule_mode+'_'+str(iso), h.molname2molid(molname), iso, 0, 20000.0,
+               ParameterGroups=['160-char', 'Labels'])
 
 
-def convert_from_mirs(mol_name: str, mirs_dir: Union[StrPath, Sequence[StrPath]],
-                      cache: Union[str, Path], overwrite_alchemy: bool=False):
-    """Save MIRS molecule data into sqlite3 DB."""
-    sql_path = Path(cache) / (mol_name + '.sqlite3')
-    if overwrite_alchemy:
-        try:
-            sql_path.unlink(missing_ok=True)
-        except FileNotFoundError:
-            pass
+def _append_or_get(insert_states, state):
+    try:
+        idx = insert_states.index(state)
+    except ValueError:
+        idx = len(insert_states)
+        insert_states.append(state)
+
+    return idx
+
+
+def _with_id(d, i):
+    d['id'] = i
+
+    return d
+
+
+def convert(sql_path, molecule_mode, iso):
+    try:
+        sql_path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+
+    molmod = import_module('molspecutils.alchemy.' + molecule_mode)
+    skip_func = getattr(molmod, 'skip_func', None)
+
+    # prepare data for insertion into DB
+    if list(h.h3.LOCAL_TABLE_CACHE.keys()) == ['sampletab']:
+        # not initialized or empty directory
+        h.h3.db_begin(str(sql_path.parent))
+    insert_lines, insert_states = [], []
+    for row in zip(*h.h3.getColumns(molecule_mode+'_'+str(iso), ParameterNames)):
+        row = h.HITRANRow(*row)
+        statepp, statep = molmod.state_dicts(row)
+        if skip_func is not None and skip_func(statepp, statep):
+            continue
+        idpp = _append_or_get(insert_states, statepp)
+        idp = _append_or_get(insert_states, statep)
+
+        insert_lines.append(molmod.line_dict(row, idpp+1, idp+1))
+
+    # insert data
     engine = create_engine("sqlite:///" + str(sql_path))
-    molmod = import_module('molspecutils.alchemy.'+mol_name)
-    molmod.Base.metadata.create_all(engine)
-
-    with Session(engine) as session:
-        if isinstance(mirs_dir, str) or isinstance(mirs_dir, Path):
-            files = Path(mirs_dir).glob('*.prd')
-        else:
-            files = mirs_dir
-        for fpath in files:
-            if Path(fpath).is_file():
-                convert_mirs_single(molmod, session, fpath)
-        session.commit()
-
-    """Save HITRAN molecule data into sqlite3 DB."""
-    hapi_path = Path(cache) / (mol_name + '.data')
-    sql_path = Path(cache) / (mol_name + '.sqlite3')
-
-    mol_id = h.molname2molid(mol_name)
-    h.h3.db_begin(cache)
-    if overwrite_hitran:
-        try:
-            hapi_path.unlink(missing_ok=True)
-        except FileNotFoundError:
-            pass
-        try:
-            hapi_path.with_suffix('.header').unlink(missing_ok=True)
-        except FileNotFoundError:
-            pass
-        h.h3.fetch(mol_name, mol_id, 1, 0, 20000.0, ParameterGroups=['160-char', 'Labels'])
-    if overwrite_alchemy:
-        try:
-            sql_path.unlink(missing_ok=True)
-        except FileNotFoundError:
-            pass
-
-    engine = create_engine("sqlite:///" + str(sql_path))
-    molmod = import_module('molspecutils.alchemy.'+mol_name)
-    molmod.Base.metadata.create_all(engine)
-
-    with Session(engine) as session:
-        for row in zip(*h.h3.getColumns(mol_name, ParameterNames)):
-            llq, luq, glq, guq, nu, el, sw, a, gair, gself, dair, nair, gp, gpp = row
-            rotppd, rotpd = molmod.local_state_convert(llq, luq)
-            vibppd, vibpd = molmod.global_state_convert(glq, guq)
-
-            rotpp_state = add_or_create(session, molmod.RotState, rotppd)
-            rotp_state = add_or_create(session, molmod.RotState, rotpd)
-
-            vibpp_state = add_or_create(session, molmod.VibState, vibppd)
-            vibp_state = add_or_create(session, molmod.VibState, vibpd)
-
-            rovibpp_state = add_or_create(
-                session, molmod.RovibState, dict(j=rotpp_state, nu=vibpp_state, energy=el, g=gpp))
-            rovibp_state = add_or_create(
-                session, molmod.RovibState, dict(j=rotp_state, nu=vibp_state, energy=el+nu, g=gp))
-
-            transition_pair = add_or_create(
-                session, molmod.TransitionPair, dict(statepp=rovibpp_state, statep=rovibp_state))
-
-            line_params = molmod.LineParameters(
-                nu=nu, sw=sw, A=a, gamma_air=gair, gamma_self=gself, n_air=nair, delta_air=dair,
-                transition=transition_pair)
-            # HITRAN database has duplicate rows, great...
-            result = session.execute(
-                    select(molmod.LineParameters).options(selectinload('*'))\
-                    .where(molmod.LineParameters.transition==transition_pair)
-            ).scalars().one_or_none()
-            if result is not None:
-                print('Skipping duplicate:')
-                print(line_params)
-                print('HITRAN row:', row)
-                print('state fragment', ''.join([guq, glq, luq, llq]))
-                print('of')
-                print(result, '\n')
-                continue
-            session.add(line_params)
-        session.commit()
+    molmod.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(insert(molmod.states),
+                     [_with_id(d, i) for i, d in enumerate(insert_states, start=1)])
+        conn.execute(insert(molmod.line_parameters, insert_lines))
+    engine.dispose()
 
 
-def first_run():
-    Path(h.hitran_cache).mkdir(parents=True, exist_ok=True)
+def get(db_path, molecule_mode, iso):
+    if db_path is None:
+        db_path = h.hitran_cache
+    print(f"Using database directory {db_path}")
+    Path(db_path).mkdir(parents=True, exist_ok=True)
+    sql_path = Path(db_path) / (molecule_mode+'_'+str(iso) + '.sqlite3')
+    if not sql_path.is_file():
+        print(f"sqlite3 database not found: {sql_path}")
+        hapi_path = Path(db_path) / (molecule_mode+'_'+str(iso) + '.data')
+        if not hapi_path.is_file():
+            print(f"HITRAN data not found, fetching with HAPI")
+            fetch(hapi_path, molecule_mode, iso)
+        print("Converting from HITRAN to sqlite3")
+        convert(sql_path, molecule_mode, iso)
 
-    print("Fetching and converting CO data...")
-    convert('CO', h.hitran_cache, True, True)
-
-    print("Fetching and converting CH3Cl data (this might take a while)...")
-    convert('CH3Cl', h.hitran_cache, True, True)
+    return create_engine("sqlite:///" + str(sql_path))

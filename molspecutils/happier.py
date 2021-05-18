@@ -33,7 +33,7 @@ cBolts = 1.380648813E-16
 Tref = 296.0
 
 # * Retrieve molecular data from HITRAN
-HITRANRow = namedtuple("HITRANRow", "llq, luq, glq, guq, nu, el, sw, a, gair, gself, dair, nair, gp, gpp")
+HITRANRow = namedtuple("HITRANRow", "llq, luq, glq, guq, nu, elower, sw, a, gair, gself, dair, nair, gp, gpp")
 
 
 def molname2molid(molname: str) -> int:
@@ -72,8 +72,8 @@ def CH3Cl_lq_to_dict(lq):
         f = float(fstring)
     else:
         f = 0.0
-    return dict(j=int(lq[:3].strip()), k=int(lq[3:6].strip()),
-                l=int(lq[6:8].strip()), sym=lq[8:10].strip(),
+    return dict(J=int(lq[:3].strip()), K=int(lq[3:6].strip()),
+                l=int(lq[6:8].strip()), rovib=lq[8:10].strip(),
                 f=f)
             
 

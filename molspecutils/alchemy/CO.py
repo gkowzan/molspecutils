@@ -1,44 +1,36 @@
-from sqlalchemy.orm import registry, relationship
-from sqlalchemy import Column, Integer, String, ForeignKey, Float
-from molspecutils.alchemy.meta import RovibMixin, TransitionMixin, BaseMixin, LineMixin
-from molspecutils.happier import CO_llq_to_pair
-
-mapper_registry = registry()
-Base = mapper_registry.generate_base(cls=BaseMixin)
-
-def local_state_convert(llq: str, luq: str):
-    j, jp = CO_llq_to_pair(llq)
-
-    return dict(j=j), dict(j=jp)
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, MetaData, Table
+from molspecutils.happier import CO_llq_to_pair, HITRANRow
+import molspecutils.alchemy.meta as meta
 
 
-def global_state_convert(glq: str, guq: str):
-    return dict(nu=int(glq.strip())), dict(nu=int(guq.strip())) 
+def state_dicts(row: HITRANRow):
+    """Return state dicts for insertion into db."""
+    Jpp, Jp = CO_llq_to_pair(row.llq)
+    nupp, nup = int(row.glq.strip()), int(row.guq.strip())
+
+    return (dict(J=Jpp, nu=nupp, g=row.gpp, energy=row.elower),
+            dict(J=Jp, nu=nup, g=row.gp, energy=row.elower+row.nu))
 
 
-class RotState(Base):
-    """Corresponds to local upper/lower state in HITRAN."""
-    __tablename__ = 'rot_state'
-    j = Column(Integer, unique=True)
+def line_dict(row: HITRANRow, statepp: int, statep: int):
+    """Return line dict for insertion into db."""
+    row = row._asdict()
+    line = {k: row[k] for k in meta.line_columns}
+    line['statepp'] = statepp
+    line['statep'] = statep
 
-    def __repr__(self):
-        return f"RotState(j={self.j!r})"
-   
-class VibState(Base):
-    """Corresponds to global upper/lower state in HITRAN."""
-    __tablename__ = 'vib_state'
-    nu = Column(Integer, unique=True)
+    return line
 
-    def __repr__(self):
-        return f"VibState(nu={self.nu!r})"
 
-# All the structure is in mix-ins. These classes are defined here to inherit
-# from CO's Base.
-class RovibState(RovibMixin, Base):
-    """"""
+metadata = MetaData()
 
-class TransitionPair(TransitionMixin, Base):
-    """"""
+states = Table(
+    "states", metadata,
+    Column('id', Integer, primary_key=True),
+    Column('energy', Float),    # general
+    Column('g', Float),
+    Column('J', Integer),     # rotational
+    Column('nu', Integer),
+)
 
-class LineParameters(LineMixin, Base):
-    """"""
+line_parameters = meta.line_parameters.to_metadata(metadata)
