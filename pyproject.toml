@@ -13,9 +13,6 @@ classifiers=[
         'Topic :: Scientific/Engineering :: Physics']
 include = ['README.md']
 
-[tool.poetry.scripts]
-molspecutils_init = "molspecutils.alchemy.convert:first_run"
-
 [tool.poetry.dependencies]
 python = ">=3.7,<3.9"
 numpy = "^1.16.5"
