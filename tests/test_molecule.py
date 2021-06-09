@@ -36,7 +36,7 @@ def test_ch3cl_delta(ch3cl_mode, state_pair):
     assert pytest.approx(ch3cl_mode.delta(state_pair)) == 0.0
 
 def test_ch3cl_equilibrium_pop(ch3cl_mode, state_pair):
-    assert pytest.approx(ch3cl_mode.equilibrium_pop(state_pair[0], 296.0)) == 0.00034793245147648864
+    assert pytest.approx(ch3cl_mode.equilibrium_pop(state_pair[0], 296.0)) == 0.0013917298059059546
 
 
 @pytest.fixture(scope='module')
@@ -60,4 +60,4 @@ def test_co_delta(co_mode, co_state_pair):
     assert pytest.approx(co_mode.delta(co_state_pair)) == -71950189.92
 
 def test_co_equilibrium_pop(co_mode, co_state_pair):
-    assert pytest.approx(co_mode.equilibrium_pop(co_state_pair[0], 296.0)) == 0.02745169596805075
+    assert pytest.approx(co_mode.equilibrium_pop(co_state_pair[0], 296.0)) == 0.027451700371417857
