@@ -14,3 +14,12 @@ def wn2joule(wn):
 
 def joule2wn(E):
     return nu2wn(E/C.h)
+
+
+def chunked(l, n):
+    """Iterate over at most `n`-element subsequences of `l`."""
+    div, rem = divmod(len(l), n)
+    for i in range(div):
+        yield l[i*n:(i+1)*n]
+    if rem:
+        yield l[div*n:div*n+rem]

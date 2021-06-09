@@ -18,11 +18,13 @@ from sqlalchemy import create_engine, select, insert
 from sqlalchemy.orm import Session, selectinload
 import molspecutils.happier as h
 import molspecutils.mirs as mirs
+from molspecutils.utils import chunked
 
 StrPath = Union[str, Path]
 ParameterNames = ('local_lower_quanta', 'local_upper_quanta', 'global_lower_quanta',
                   'global_upper_quanta', 'nu', 'elower', 'sw', 'a', 'gamma_air',
                   'gamma_self', 'delta_air', 'n_air', 'gp', 'gpp')
+VALUES_LIMIT=999
 
 # * Functions
 def fetch(hapi_path, molecule_mode, iso):
@@ -87,7 +89,8 @@ def convert(sql_path, molecule_mode, iso):
     with engine.begin() as conn:
         conn.execute(insert(molmod.states),
                      [_with_id(d, i) for i, d in enumerate(insert_states, start=1)])
-        conn.execute(insert(molmod.line_parameters, insert_lines))
+        for lines_chunk in chunked(insert_lines, VALUES_LIMIT//len(insert_lines[0])):
+            conn.execute(insert(molmod.line_parameters), lines_chunk)
     engine.dispose()
 
 
