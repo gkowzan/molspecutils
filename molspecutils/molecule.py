@@ -195,6 +195,14 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
                     zip(['A', 'gamma', 'delta'], row[:3]))
 
     def mu(self, pair: Tuple[RotState]):
+        r"""Reduced matrix element for the `pair` transitions.
+
+        Obtained from HITRAN's Einsten A-coefficient:
+
+        .. math::
+
+            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+        """
         params, _ = self.line_params(pair)
         if params is None:
             print(pair)
