@@ -1,4 +1,5 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
+import logging
 from typing import Tuple
 from pathlib import Path
 import abc
@@ -18,6 +19,7 @@ from molspecutils.alchemy.meta import hitran_cache
 class RotState(abc.ABC):
     pass
 
+log = logging.getLogger('__name__')
 
 @RotState.register
 class DiatomState(namedtuple("DiatomState", ["nu", "j"])):
@@ -99,7 +101,11 @@ class AlchemyModeMixin:
         result = self._line_params(pair)
         if result:
             return (result, 1)
-        return (self._line_params(pair[::-1]), -1)
+        result = self._line_params(pair[::-1])
+        if result is None:
+            log.warning("Missing line parameters for: %r", pair)
+            result = dict(zip(['A', 'gamma', 'delta'], [0]*3))
+        return (result, -1)
 
     def gamma(self, pair: Tuple[RotState]):
         params, _ = self.line_params(pair)
