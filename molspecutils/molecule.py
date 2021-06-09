@@ -200,17 +200,25 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
             print(pair)
         A = params['A']
         nu = abs(self.nu(pair))
-        rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
+        if _ == 1:
+            j = pair[1].j
+        elif _ == -1:
+            j = pair[0].j
+        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
+        # Eq. (5.9) from rotsim2d_roadmap
+        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
 
         return rmu
 
     def equilibrium_pop(self, state: RotState, T: float):
         kt = u.joule2wn(C.k*T)
         e = self.elevels[state]
-        kfac = 1 if state.j==0 else 2
+        gnuc = 16
+        k3 = 2 if state.k > 0 and state.k % 3 == 0 else 1
+        fudge_factor = 0.5
 
         # return np.sqrt(kfac*(2*state.j+1))*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)
-        return kfac*(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)
+        return gnuc*k3*(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)*fudge_factor
 
 
 class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
@@ -283,7 +291,7 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
             j = pair[0].j
         # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
         # Eq. (5.9) from rotsim2d_roadmap
-        rmu = np.sqrt(A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
+        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
 
         return rmu
 
@@ -295,4 +303,4 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
         e = self.elevels[state]
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)
+        return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)
