@@ -109,7 +109,7 @@ class AlchemyModeMixin:
 
     def gamma(self, pair: Tuple[RotState]):
         params, _ = self.line_params(pair)
-        if params is None:
+        if params is None or params['gamma'] == 0:
             gam = self._fake_gamma(pair)
         else:
             gam = params['gamma']
