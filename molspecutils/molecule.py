@@ -103,7 +103,7 @@ class AlchemyModeMixin:
             return (result, 1)
         result = self._line_params(pair[::-1])
         if result is None:
-            log.warning("Missing line parameters for: %r", pair)
+            log.debug("Missing line parameters for: %r", pair)
             result = dict(zip(['A', 'gamma', 'delta'], [0]*3))
         return (result, -1)
 
