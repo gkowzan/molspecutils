@@ -1,20 +1,17 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
 import logging
 from typing import Tuple
-from pathlib import Path
 import abc
 from collections import namedtuple
 import numpy as np
 import scipy.constants as C
-from sqlalchemy.orm import aliased, selectinload, Session
-from sqlalchemy import select, create_engine
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 import molspecutils.utils as u
 import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
 from molspecutils.alchemy.convert import get
-from molspecutils.alchemy.meta import hitran_cache
 
 class RotState(abc.ABC):
     pass
