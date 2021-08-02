@@ -1,6 +1,6 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
 import logging
-from typing import Tuple
+from typing import Tuple, Mapping
 import abc
 from collections import namedtuple
 import numpy as np
@@ -309,3 +309,54 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
         return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)
+
+
+class LinearManifold:
+    def __init__(self, origin: float, B: float, D: float=0.0, HJ: float=0.0):
+        self.origin = origin
+        self.B = B
+        self.D = D
+        self.HJ = HJ
+
+    def energy(self, J: int) -> float:
+        JJ1 = J*(J+1)
+        return self.origin + self.B*JJ1 - self.D*JJ1**2 + self.HJ*JJ1**3
+
+
+class SymTopManifold:
+    def __init__(self, origin: float, B: float, C: float,
+                 D: float=0.0, DJK: float=0.0, DK:float =0.0,
+                 HJ: float=0.0, HJK: float=0.0, HKJ: float=0.0,
+                 HK: float=0.0):
+        self.origin = origin
+        self.B = B
+        self.C = C              # A or C
+        self.D = D
+        self.DJK = DJK
+        self.DK = DK
+        self.HJ = HJ
+        self.HJK = HJK
+        self.HKJ = HKJ
+        self.HK = HK
+
+    def energy(self, J: int, K: int) -> float:
+        if K>J:
+            raise ValueError("K cannot be larger than J!")
+        JJ1 = J*(J+1)
+        return self.origin + self.B*JJ1 + (self.C-self.B)*K**2\
+            - self.D*JJ1**2 - self.DK*K**4 - self.DJK*JJ1*K**2\
+            + self.HJ*JJ1**3 + self.HK*K**6 + self.HJK*JJ1**2*K**2\
+            + self.HKJ*JJ1*K**4
+
+
+class COEffectiveMode(COAlchemyMode):
+    def __init__(self, manifolds: Mapping[int, LinearManifold],
+                 engine_or_path=None, iso=1):
+        COAlchemyMode.__init__(self, engine_or_path, iso)
+        self.manifolds = manifolds
+
+    def nu(self, pair: Tuple[RotState]):
+        Ep = self.manifolds[pair[1].nu].energy(pair[1].j)
+        Epp = self.manifolds[pair[0].nu].energy(pair[0].j)
+
+        return Ep-Epp
