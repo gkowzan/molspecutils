@@ -13,6 +13,12 @@ import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
 from molspecutils.alchemy.convert import get
 
+class MissingStateError(Exception):
+    pass
+
+class MissingLineError(Exception):
+    pass
+
 class RotState(abc.ABC):
     pass
 
@@ -120,7 +126,12 @@ class AlchemyModeMixin:
         return u.wn2nu(delt)
 
     def nu(self, pair: Tuple[RotState]):
-        return u.wn2nu(self.elevels[pair[1]]-self.elevels[pair[0]])
+        try:
+            return u.wn2nu(self.elevels[pair[1]]-self.elevels[pair[0]])
+        except KeyError as e:
+            raise MissingStateError("Energy for state `{!s}` is not available".format(
+                e.args[0]
+            ))
 
     def _fake_gamma(self, pair: Tuple[RotState]):
         for kpp, kp in self.lines.keys():
