@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "molspecutils"
-version = "0.1.5-alpha.0"
+version = "0.1.5-alpha.1"
 description = "Modules for working with molecular spectroscopy data"
 authors = ["Grzegorz Kowzan <grzegorz@kowzan.eu>"]
 readme = "README.md"
@@ -26,6 +26,7 @@ importlib-metadata = {version="^1.0", python="<3.8"}
 [tool.poetry.dev-dependencies]
 pytest = "*"
 tox = "*"
+bump2version = "*"
 
 [tool.poetry.extras]
 doc = ["Sphinx"]
