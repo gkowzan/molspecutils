@@ -203,7 +203,7 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
                     zip(['A', 'gamma', 'delta'], row[:3]))
 
     def mu(self, pair: Tuple[RotState]):
-        r"""Reduced matrix element for the `pair` transitions.
+        r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
 
         Obtained from HITRAN's Einsten A-coefficient:
 
@@ -223,6 +223,8 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
         # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
         # Eq. (5.9) from rotsim2d_roadmap
         rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
+        if pair[0].j < pair[1].j:
+            rmu = -rmu
 
         return rmu
 
