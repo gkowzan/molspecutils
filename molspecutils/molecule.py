@@ -12,6 +12,7 @@ import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
 from molspecutils.alchemy.convert import get
+from typing import Union
 
 class MissingStateError(Exception):
     pass
@@ -19,12 +20,9 @@ class MissingStateError(Exception):
 class MissingLineError(Exception):
     pass
 
-class RotState(abc.ABC):
-    pass
-
 log = logging.getLogger('__name__')
 
-@RotState.register
+
 class DiatomState(namedtuple("DiatomState", ["nu", "j"])):
     """Named tuple representing diatom rovib state with `nu`, `j` quantum numbers."""
     __slots__ = ()
@@ -50,7 +48,6 @@ class DiatomState(namedtuple("DiatomState", ["nu", "j"])):
         return hash((self.nu, self.j))
 
 
-@RotState.register
 class SymTopState(namedtuple("SymTopState", ["nu", "j", "k"])):
     """Named tuple representing symmetric top rovib state with `nu`, `j`, `k`
     quantum numbers."""
@@ -70,6 +67,9 @@ class SymTopState(namedtuple("SymTopState", ["nu", "j", "k"])):
 
     def __hash__(self):
         return hash((self.nu, self.j, self.k))
+
+
+RotState = Union[DiatomState, SymTopState]
 
 
 class VibrationalMode(abc.ABC):
@@ -107,7 +107,7 @@ class AlchemyModeMixin:
         result = self._line_params(pair[::-1])
         if result is None:
             log.debug("Missing line parameters for: %r", pair)
-            result = dict(zip(['A', 'gamma', 'delta'], [0]*3))
+            result = dict(zip(['A', 'gamma', 'delta', 'sw'], [0]*3))
         return (result, -1)
 
     def gamma(self, pair: Tuple[RotState]):
@@ -118,6 +118,12 @@ class AlchemyModeMixin:
             gam = params['gamma']
 
         return u.wn2nu(gam)
+
+    def sw(self, pair: Tuple[RotState]):
+        params, _ = self.line_params(pair)
+        sw = params['sw']
+
+        return sw/1e4           # m**2/molecule
 
     def delta(self, pair: Tuple[RotState]):
         params, _ = self.line_params(pair)
@@ -190,17 +196,17 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
             statepp = CH3Cl_nu3.states.alias()
             statep = CH3Cl_nu3.states.alias()
             result = conn.execute(
-                select(lp.c.a, lp.c.gair, lp.c.dair,
+                select(lp.c.a, lp.c.gair, lp.c.dair, lp.c.sw,
                        statepp.c.nu3, statepp.c.J, statepp.c.K,
                        statep.c.nu3, statep.c.J, statep.c.K).\
                 join_from(lp, statepp, lp.c.statepp==statepp.c.id).\
                 join_from(lp, statep, lp.c.statep==statep.c.id))
 
             for row in result:
-                spp = SymTopState(*row[3:6])
-                sp = SymTopState(*row[6:9])
+                spp = SymTopState(*row[4:7])
+                sp = SymTopState(*row[7:10])
                 self.lines[(spp, sp)] = dict(
-                    zip(['A', 'gamma', 'delta'], row[:3]))
+                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
 
     def mu(self, pair: Tuple[RotState]):
         r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
@@ -268,17 +274,17 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
             statepp = CO.states.alias()
             statep = CO.states.alias()
             result = conn.execute(
-                select(lp.c.a, lp.c.gair, lp.c.dair,
+                select(lp.c.a, lp.c.gair, lp.c.dair, lp.c.sw,
                        statepp.c.nu, statepp.c.J,
                        statep.c.nu, statep.c.J).\
                 join_from(lp, statepp, lp.c.statepp==statepp.c.id).\
                 join_from(lp, statep, lp.c.statep==statep.c.id))
 
             for row in result:
-                spp = DiatomState(*row[3:5])
-                sp = DiatomState(*row[5:7])
+                spp = DiatomState(*row[4:6])
+                sp = DiatomState(*row[6:8])
                 self.lines[(spp, sp)] = dict(
-                    zip(['A', 'gamma', 'delta'], row[:3]))
+                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
 
     def _generate_elevels(self, engine: Engine):
         self.elevels = {}
