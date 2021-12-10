@@ -75,19 +75,19 @@ RotState = Union[DiatomState, SymTopState]
 class VibrationalMode(abc.ABC):
     """Interface of a class representing a molecular vibrational mode."""
     @abc.abstractmethod
-    def gamma(self, pair: Tuple[RotState]):
+    def gamma(self, pair: Tuple[RotState, RotState]):
         """Pressure broadening coefficient for `pair` molecular coherence."""
 
     @abc.abstractmethod
-    def delta(self, pair: Tuple[RotState]):
+    def delta(self, pair: Tuple[RotState, RotState]):
         """Pressure shift coefficient for `pair` molecular coherence."""
 
     @abc.abstractmethod
-    def mu(self, pair: Tuple[RotState]):
+    def mu(self, pair: Tuple[RotState, RotState]):
         """Reduced matrix element for dipole transition between `pair` states."""
 
     @abc.abstractmethod
-    def nu(self, pair: Tuple[RotState]):
+    def nu(self, pair: Tuple[RotState, RotState]):
         """Frequency of molecular coherence `pair`."""
 
     @abc.abstractmethod
@@ -100,7 +100,7 @@ class AlchemyModeMixin:
     """Molecular vibrational mode backed by SQLAlchemy sqlite database.
 
     This is a mix-in."""
-    def line_params(self, pair: Tuple[RotState]):
+    def line_params(self, pair: Tuple[RotState, RotState]):
         result = self._line_params(pair)
         if result:
             return (result, 1)
@@ -110,7 +110,7 @@ class AlchemyModeMixin:
             result = dict(zip(['A', 'gamma', 'delta', 'sw'], [0]*3))
         return (result, -1)
 
-    def gamma(self, pair: Tuple[RotState]):
+    def gamma(self, pair: Tuple[RotState, RotState]):
         params, _ = self.line_params(pair)
         if params is None or params['gamma'] == 0:
             gam = self._fake_gamma(pair)
@@ -119,19 +119,19 @@ class AlchemyModeMixin:
 
         return u.wn2nu(gam)
 
-    def sw(self, pair: Tuple[RotState]):
+    def sw(self, pair: Tuple[RotState, RotState]):
         params, _ = self.line_params(pair)
         sw = params['sw']
 
         return sw/1e4           # m**2/molecule
 
-    def delta(self, pair: Tuple[RotState]):
+    def delta(self, pair: Tuple[RotState, RotState]):
         params, _ = self.line_params(pair)
         delt = params['delta']
 
         return u.wn2nu(delt)
 
-    def nu(self, pair: Tuple[RotState]):
+    def nu(self, pair: Tuple[RotState, RotState]):
         try:
             return u.wn2nu(self.elevels[pair[1]]-self.elevels[pair[0]])
         except KeyError as e:
@@ -139,12 +139,12 @@ class AlchemyModeMixin:
                 e.args[0]
             ))
 
-    def _fake_gamma(self, pair: Tuple[RotState]):
+    def _fake_gamma(self, pair: Tuple[RotState, RotState]):
         for kpp, kp in self.lines.keys():
             if pair[0]==kp or pair[0]==kpp or pair[1]==kp or pair[1]==kpp:
                 return self.lines[(kpp, kp)]['gamma']
 
-    def _line_params(self, pair: Tuple[RotState]):
+    def _line_params(self, pair: Tuple[RotState, RotState]):
         return self.lines.get(pair)
 
 
@@ -208,7 +208,7 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
                 self.lines[(spp, sp)] = dict(
                     zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
 
-    def mu(self, pair: Tuple[RotState]):
+    def mu(self, pair: Tuple[RotState, RotState]):
         r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
 
         Obtained from HITRAN's Einsten A-coefficient:
@@ -295,7 +295,7 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
             for row in result:
                 self.elevels[DiatomState(*row[1:])] = row[0]
 
-    def mu(self, pair: Tuple[RotState]):
+    def mu(self, pair: Tuple[RotState, RotState]):
         r"""Reduced matrix element for the `pair` transitions.
 
         Obtained from HITRAN's Einsten A-coefficient:
