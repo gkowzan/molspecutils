@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "molspecutils"
-version = "0.2.0"
+version = "0.2.0-alpha.1"
 description = "Modules for working with molecular spectroscopy data"
 authors = ["Grzegorz Kowzan <grzegorz@kowzan.eu>"]
 readme = "README.md"
