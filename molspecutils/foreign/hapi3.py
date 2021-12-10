@@ -31,7 +31,7 @@ from numpy import convolve
 from numpy import flipud
 from numpy.fft import fft,fftshift
 from numpy import linspace,floor
-from numpy import any,minimum,maximum
+from numpy import any,minimum,maximum,round
 from numpy import modf
 from numpy import sort as npsort
 from bisect import bisect
@@ -131,12 +131,13 @@ VARIABLES['DISPLAY_FETCH_URL'] = False
 # from the shift of the nodes due to error accumulation.
 # This effect is pronounced only if the step is sufficiently small.
 def arange_(lower,upper,step):
-    npnt = floor((upper-lower)/step)+1
-    upper_new = lower + step*(npnt-1)
-    if abs((upper-upper_new)-step) < 1e-10:
-        upper_new += step
-        npnt += 1
-    return linspace(lower,upper_new,npnt)
+   npnt = floor((upper-lower)/step)+1
+   upper_new = lower + step*(npnt-1)
+   if abs((upper-upper_new)-step) < 1e-10:
+      upper_new += step
+      npnt += 1
+   npnt = round(npnt).astype(int64)
+   return linspace(lower,upper_new,npnt)
 
 
 # interface for checking of variable's existance
