@@ -1,0 +1,10 @@
+-e .[doc]
+-c requirements.txt
+pytest
+tox
+isort
+mypy
+bump2version
+build
+twine
+pip-tools
