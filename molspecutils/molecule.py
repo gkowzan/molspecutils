@@ -54,18 +54,18 @@ class SymTopState(namedtuple("SymTopState", ["nu", "j", "k"])):
     __slots__ = ()
 
     @property
-    def name(self):
+    def name(self) -> str:
         return "{:d},{:d},{:d}".format(self.nu, self.j, self.k)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "SymTopState(nu={:d}, j={:d}, k={:d})".format(self.nu, self.j, self.k)
 
-    def __eq__(self, o):
+    def __eq__(self, o) -> bool:
         if not isinstance(o, SymTopState):
             return NotImplemented
         return self.nu == o.nu and self.k == o.k and self.j == o.j
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.nu, self.j, self.k))
 
 
@@ -75,23 +75,23 @@ RotState = Union[DiatomState, SymTopState]
 class VibrationalMode(abc.ABC):
     """Interface of a class representing a molecular vibrational mode."""
     @abc.abstractmethod
-    def gamma(self, pair: Tuple[RotState, RotState]):
+    def gamma(self, pair: Tuple[RotState, RotState]) -> float:
         """Pressure broadening coefficient for `pair` molecular coherence."""
 
     @abc.abstractmethod
-    def delta(self, pair: Tuple[RotState, RotState]):
+    def delta(self, pair: Tuple[RotState, RotState]) -> float:
         """Pressure shift coefficient for `pair` molecular coherence."""
 
     @abc.abstractmethod
-    def mu(self, pair: Tuple[RotState, RotState]):
+    def mu(self, pair: Tuple[RotState, RotState]) -> float:
         """Reduced matrix element for dipole transition between `pair` states."""
 
     @abc.abstractmethod
-    def nu(self, pair: Tuple[RotState, RotState]):
+    def nu(self, pair: Tuple[RotState, RotState]) -> float:
         """Frequency of molecular coherence `pair`."""
 
     @abc.abstractmethod
-    def equilibrium_pop(self, state: RotState, T: float):
+    def equilibrium_pop(self, state: RotState, T: float) -> float:
         """Fractional population of `state` at temperature `T` in thermal
         equilibrium."""
 
@@ -110,7 +110,7 @@ class AlchemyModeMixin:
             result = dict(zip(['A', 'gamma', 'delta', 'sw'], [0]*3))
         return (result, -1)
 
-    def gamma(self, pair: Tuple[RotState, RotState]):
+    def gamma(self, pair: Tuple[RotState, RotState]) -> float:
         params, _ = self.line_params(pair)
         if params is None or params['gamma'] == 0:
             gam = self._fake_gamma(pair)
@@ -119,19 +119,19 @@ class AlchemyModeMixin:
 
         return u.wn2nu(gam)
 
-    def sw(self, pair: Tuple[RotState, RotState]):
+    def sw(self, pair: Tuple[RotState, RotState]) -> float:
         params, _ = self.line_params(pair)
         sw = params['sw']
 
         return sw/1e4           # m**2/molecule
 
-    def delta(self, pair: Tuple[RotState, RotState]):
+    def delta(self, pair: Tuple[RotState, RotState]) -> float:
         params, _ = self.line_params(pair)
         delt = params['delta']
 
         return u.wn2nu(delt)
 
-    def nu(self, pair: Tuple[RotState, RotState]):
+    def nu(self, pair: Tuple[RotState, RotState]) -> float:
         try:
             return u.wn2nu(self.elevels[pair[1]]-self.elevels[pair[0]])
         except KeyError as e:
@@ -139,7 +139,7 @@ class AlchemyModeMixin:
                 e.args[0]
             ))
 
-    def _fake_gamma(self, pair: Tuple[RotState, RotState]):
+    def _fake_gamma(self, pair: Tuple[RotState, RotState]) -> float:
         for kpp, kp in self.lines.keys():
             if pair[0]==kp or pair[0]==kpp or pair[1]==kp or pair[1]==kpp:
                 return self.lines[(kpp, kp)]['gamma']
@@ -164,10 +164,10 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
         Parameters
         ----------
-        engine_or_path
+        engine_or_path : str
             Path to directory with HAPI or sqlite3 database or
             :class:`sqlachemy.Engine` instance of opened sqlite3 database.
-        iso
+        iso : int
             Isotopologue number, 1 for 35Cl and 2 for 37Cl. Required for
             fetching data and calculating appropriate total partition function.
         """
@@ -208,7 +208,7 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
                 self.lines[(spp, sp)] = dict(
                     zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
 
-    def mu(self, pair: Tuple[RotState, RotState]):
+    def mu(self, pair: Tuple[RotState, RotState]) -> float:
         r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
 
         Obtained from HITRAN's Einsten A-coefficient:
@@ -234,7 +234,7 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
         return rmu
 
-    def equilibrium_pop(self, state: RotState, T: float):
+    def equilibrium_pop(self, state: RotState, T: float) -> float:
         kt = u.joule2wn(C.k*T)
         e = self.elevels[state]
         gnuc = 16
@@ -374,8 +374,38 @@ class COEffectiveMode(COAlchemyMode):
         COAlchemyMode.__init__(self, engine_or_path, iso)
         self.manifolds = manifolds
 
-    def nu(self, pair: Tuple[RotState]):
+    @classmethod
+    def from_constants(cls, we: float, Be: float, alphae: float, maxnu: int,
+                       wexe: float=0.0, gammae: float=0.0, betae: float=0.0,
+                       De: float=0.0) -> "COEffectiveMode":
+        nus = list(range(maxnu+1))
+        manifolds = []
+        for v in nus:
+            v12 = v+0.5
+            manifolds.append(
+                LinearManifold(
+                    origin=we*v12 - wexe*v12**2,
+                    B=Be - alphae*v12 + gammae*v12**2,
+                    D=De + betae*v12
+                ))
+
+        return COEffectiveMode(dict(zip(nus, manifolds)))
+
+    def nu(self, pair: Tuple[RotState, RotState]):
         Ep = self.manifolds[pair[1].nu].energy(pair[1].j)
         Epp = self.manifolds[pair[0].nu].energy(pair[0].j)
+
+        return Ep-Epp
+
+
+class CH3ClEffectiveMode(CH3ClAlchemyMode):
+    def __init__(self, manifolds: Mapping[int, SymTopManifold],
+                 engine_or_path=None, iso=1):
+        CH3ClAlchemyMode.__init__(self, engine_or_path, iso)
+        self.manifolds = manifolds
+
+    def nu(self, pair: Tuple[SymTopState, SymTopState]) -> float:
+        Ep = self.manifolds[pair[1].nu].energy(pair[1].j, pair[1].k)
+        Epp = self.manifolds[pair[0].nu].energy(pair[0].j, pair[0].k)
 
         return Ep-Epp
