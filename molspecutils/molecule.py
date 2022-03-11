@@ -355,8 +355,25 @@ class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
             result = conn.execute(
                 select(st.c.energy, st.c.nu1, st.c.J))
             for row in result:
-                print(row)
                 self.elevels[DiatomState(*row[1:])] = row[0]
+
+    def degeneracy(self, state: RotState) -> int:
+        """Return quantum state degeneracy."""
+        jdeg = 2*state.j+1
+        if state.nu == 0:
+            if state.j % 2 == 0:
+                nucdeg = 1
+            else:
+                nucdeg = 3
+        elif state.nu == 1:
+            if state.j % 2 == 0:
+                nucdeg = 3
+            else:
+                nucdeg = 1
+        else:
+            raise ValueError("Can't calculate degeneracy for '{:s}'".format(state))
+
+        return jdeg*nucdeg
 
     def equilibrium_pop(self, state: RotState, T: float):
         r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
@@ -366,7 +383,34 @@ class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
         e = self.elevels[state]
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(26, self._iso, T)
+        return self.degeneracy(state)*np.exp(-e/kt)/hap.PYTIPS(26, self._iso, T)
+
+    def mu(self, pair: Tuple[RotState, RotState]) -> float:
+        r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
+
+        Obtained from HITRAN's Einsten A-coefficient:
+
+        .. math::
+
+            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+        """
+        params, _ = self.line_params(pair)
+        if params is None:
+            print(pair)
+        A = params['A']
+        nu = abs(self.nu(pair))
+        if _ == 1:
+            statep = pair[1]
+        else:
+            statep = pair[0]
+        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
+        # Eq. (5.9) from rotsim2d_roadmap
+        deg = self.degeneracy(statep)
+        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*deg/(16*np.pi**3*nu**3))
+        if pair[0].j < pair[1].j:
+            rmu = -rmu
+
+        return rmu
 
 class LinearManifold:
     def __init__(self, origin: float, B: float, D: float=0.0, HJ: float=0.0):
