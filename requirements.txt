@@ -8,6 +8,8 @@
 
 appdirs==1.4.4
     # via molspecutils (setup.cfg)
+attrs==21.4.0
+    # via molspecutils (setup.cfg)
 greenlet==1.1.2
     # via sqlalchemy
 numpy==1.21.4

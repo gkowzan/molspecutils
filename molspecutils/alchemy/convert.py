@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 import molspecutils.happier as h
 import molspecutils.mirs as mirs
 from molspecutils.utils import chunked
+import molspecutils.alchemy.meta as meta
 
 StrPath = Union[str, Path]
 ParameterNames = ('local_lower_quanta', 'local_upper_quanta', 'global_lower_quanta',
@@ -59,6 +60,16 @@ def _with_id(d, i):
     return d
 
 
+def line_dict(row: h.HITRANRow, statepp: int, statep: int):
+    """Return line dict for insertion into db."""
+    drow = row._asdict()
+    line = {k: drow[k] for k in meta.line_columns}
+    line['statepp'] = statepp
+    line['statep'] = statep
+
+    return line
+
+
 def convert(sql_path, molecule_mode, iso):
     try:
         sql_path.unlink(missing_ok=True)
@@ -81,7 +92,7 @@ def convert(sql_path, molecule_mode, iso):
         idpp = _append_or_get(insert_states, statepp)
         idp = _append_or_get(insert_states, statep)
 
-        insert_lines.append(molmod.line_dict(row, idpp+1, idp+1))
+        insert_lines.append(line_dict(row, idpp+1, idp+1))
 
     # insert data
     engine = create_engine("sqlite:///" + str(sql_path))

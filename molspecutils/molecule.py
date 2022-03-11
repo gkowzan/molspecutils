@@ -11,6 +11,7 @@ import molspecutils.utils as u
 import molspecutils.happier as hap
 import molspecutils.alchemy.CO as CO
 import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
+import molspecutils.alchemy.C2H2_nu1nu3 as C2H2_nu1nu3
 from molspecutils.alchemy.convert import get
 from typing import Union
 
@@ -139,6 +140,32 @@ class AlchemyModeMixin:
                 e.args[0]
             ))
 
+    def mu(self, pair: Tuple[RotState, RotState]) -> float:
+        r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
+
+        Obtained from HITRAN's Einsten A-coefficient:
+
+        .. math::
+
+            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+        """
+        params, _ = self.line_params(pair)
+        if params is None:
+            print(pair)
+        A = params['A']
+        nu = abs(self.nu(pair))
+        if _ == 1:
+            j = pair[1].j
+        elif _ == -1:
+            j = pair[0].j
+        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
+        # Eq. (5.9) from rotsim2d_roadmap
+        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
+        if pair[0].j < pair[1].j:
+            rmu = -rmu
+
+        return rmu
+
     def _fake_gamma(self, pair: Tuple[RotState, RotState]) -> float:
         for kpp, kp in self.lines.keys():
             if pair[0]==kp or pair[0]==kpp or pair[1]==kp or pair[1]==kpp:
@@ -208,32 +235,6 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
                 self.lines[(spp, sp)] = dict(
                     zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
 
-    def mu(self, pair: Tuple[RotState, RotState]) -> float:
-        r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
-
-        Obtained from HITRAN's Einsten A-coefficient:
-
-        .. math::
-
-            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
-        """
-        params, _ = self.line_params(pair)
-        if params is None:
-            print(pair)
-        A = params['A']
-        nu = abs(self.nu(pair))
-        if _ == 1:
-            j = pair[1].j
-        elif _ == -1:
-            j = pair[0].j
-        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
-        # Eq. (5.9) from rotsim2d_roadmap
-        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
-        if pair[0].j < pair[1].j:
-            rmu = -rmu
-
-        return rmu
-
     def equilibrium_pop(self, state: RotState, T: float) -> float:
         kt = u.joule2wn(C.k*T)
         e = self.elevels[state]
@@ -295,30 +296,6 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
             for row in result:
                 self.elevels[DiatomState(*row[1:])] = row[0]
 
-    def mu(self, pair: Tuple[RotState, RotState]):
-        r"""Reduced matrix element for the `pair` transitions.
-
-        Obtained from HITRAN's Einsten A-coefficient:
-
-        .. math::
-
-            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
-        """
-        params, _ = self.line_params(pair)
-        if params is None:
-            print(pair)
-        A = params['A']
-        nu = abs(self.nu(pair))
-        if _ == 1:
-            j = pair[1].j
-        elif _ == -1:
-            j = pair[0].j
-        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
-        # Eq. (5.9) from rotsim2d_roadmap
-        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
-
-        return rmu
-
     def equilibrium_pop(self, state: RotState, T: float):
         r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
         :math:`e^{-E_{\nu,j}/kT}/Q`.
@@ -329,6 +306,67 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
         return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)
 
+
+class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
+    def __init__(self, engine_or_path=None, iso=1):
+        """Provide transition and energy level data for C2H2 nu1+nu3 mode.
+
+        Parameters
+        ----------
+        engine_or_path
+            Path to directory with HAPI or sqlite3 database or
+            :class:`sqlachemy.Engine` instance of opened sqlite3 database.
+        iso
+            Isotopologue number. Required for fetching data and calculating
+            appropriate total partition function.
+        """
+        if isinstance(engine_or_path, Engine):
+            engine = engine_or_path
+        else:
+            engine = get(engine_or_path, 'C2H2_nu1nu3', iso)
+
+        self._iso = iso
+        self._generate_lines(engine)
+        self._generate_elevels(engine)
+
+    def _generate_lines(self, engine: Engine):
+        self.lines = {}
+        with engine.begin() as conn:
+            lp = C2H2_nu1nu3.line_parameters
+            statepp = C2H2_nu1nu3.states.alias()
+            statep = C2H2_nu1nu3.states.alias()
+            result = conn.execute(
+                select(lp.c.a, lp.c.gair, lp.c.dair, lp.c.sw,
+                       statepp.c.nu1, statepp.c.J,
+                       statep.c.nu1, statep.c.J).\
+                join_from(lp, statepp, lp.c.statepp==statepp.c.id).\
+                join_from(lp, statep, lp.c.statep==statep.c.id))
+
+            for row in result:
+                spp = DiatomState(*row[4:6])
+                sp = DiatomState(*row[6:8])
+                self.lines[(spp, sp)] = dict(
+                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
+
+    def _generate_elevels(self, engine: Engine):
+        self.elevels = {}
+        with engine.begin() as conn:
+            st = C2H2_nu1nu3.states
+            result = conn.execute(
+                select(st.c.energy, st.c.nu1, st.c.J))
+            for row in result:
+                print(row)
+                self.elevels[DiatomState(*row[1:])] = row[0]
+
+    def equilibrium_pop(self, state: RotState, T: float):
+        r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
+        :math:`e^{-E_{\nu,j}/kT}/Q`.
+        """
+        kt = u.joule2wn(C.k*T)
+        e = self.elevels[state]
+
+        # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
+        return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(26, self._iso, T)
 
 class LinearManifold:
     def __init__(self, origin: float, B: float, D: float=0.0, HJ: float=0.0):

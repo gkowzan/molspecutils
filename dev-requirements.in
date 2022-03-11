@@ -8,3 +8,4 @@ bump2version
 build
 twine
 pip-tools
+pyflakes

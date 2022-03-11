@@ -1,16 +1,20 @@
 """Auxilliary functions extending the HAPI library. """
 # * Imports and constants
-from pathlib import Path
-import sys
-from collections import namedtuple
 import importlib.util
 import re
+import sys
+from collections import namedtuple
+from pathlib import Path
+
 import appdirs
 import numpy as np
 import scipy.constants as C
-from molspecutils.data.pytips import (Tdat, TIPS_ISO_HASH, TIPS_GSI_HASH,
-                                      TIPS_NPT)
+from attrs import asdict, define
+
 import molspecutils.utils as u
+from molspecutils.data.pytips import (TIPS_GSI_HASH, TIPS_ISO_HASH, TIPS_NPT,
+                                      Tdat)
+
 
 def lazy(fullname):
   try:
@@ -87,6 +91,49 @@ def CO_llq_to_pair(llq):
         jp = j-1
     else:
         raise ValueError('Branch is neither "R" nor "P".')
+
+    return (j, jp)
+
+
+@define
+class C2H2GlobalState:
+    nu1: int
+    nu2: int
+    nu3: int
+    nu4: int
+    nu5: int
+    l4: int
+    l5: int
+    plus: str
+    S: str
+
+    @classmethod
+    def from_str(cls, s: str):
+        """Parse HITRAN 15-char string."""
+        return cls(
+            nu1=int(s[1]),
+            nu2=int(s[2]),
+            nu3=int(s[3]),
+            nu4=int(s[4:6]),
+            nu5=int(s[6:8]),
+            l4=int(s[8:10]),
+            l5=int(s[10:12]),
+            plus=s[12],
+            S=s[14])
+
+
+def C2H2_llq_to_pair(llq):
+    """Convert `local_lower_quanta` to (Jpp, Jp)."""
+    branch = llq[5]
+    j = int(llq[6:9])
+    if branch == 'R':
+        jp = j+1
+    elif branch == 'P':
+        jp = j-1
+    elif branch == 'Q':
+        jp = j
+    else:
+        raise ValueError("`branch` is neither 'R' nor 'P'")
 
     return (j, jp)
 

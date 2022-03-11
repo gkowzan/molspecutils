@@ -12,16 +12,6 @@ def state_dicts(row: HITRANRow):
             dict(J=Jp, nu=nup, g=row.gp, energy=row.elower+row.nu))
 
 
-def line_dict(row: HITRANRow, statepp: int, statep: int):
-    """Return line dict for insertion into db."""
-    row = row._asdict()
-    line = {k: row[k] for k in meta.line_columns}
-    line['statepp'] = statepp
-    line['statep'] = statep
-
-    return line
-
-
 metadata = MetaData()
 
 states = Table(
