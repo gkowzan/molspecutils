@@ -1,19 +1,23 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
-import logging
-from typing import Tuple, Mapping
 import abc
+import logging
 from collections import namedtuple
+from typing import Mapping, Tuple, Union
+
 import numpy as np
 import scipy.constants as C
+from attrs import define, field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
-import molspecutils.utils as u
-import molspecutils.happier as hap
-import molspecutils.alchemy.CO as CO
-import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
+
 import molspecutils.alchemy.C2H2_nu1nu3 as C2H2_nu1nu3
+import molspecutils.alchemy.CH3Cl_nu3 as CH3Cl_nu3
+import molspecutils.alchemy.CO as CO
+import molspecutils.happier as hap
+import molspecutils.utils as u
 from molspecutils.alchemy.convert import get
-from typing import Union
+
+log = logging.getLogger('__name__')
 
 class MissingStateError(Exception):
     pass
@@ -21,7 +25,6 @@ class MissingStateError(Exception):
 class MissingLineError(Exception):
     pass
 
-log = logging.getLogger('__name__')
 
 
 class DiatomState(namedtuple("DiatomState", ["nu", "j"])):
