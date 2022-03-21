@@ -75,57 +75,90 @@ class VibrationalMode(abc.ABC):
         """Reduced matrix element for dipole transition between `pair` states."""
 
     @abc.abstractmethod
-    def nu(self, pair: Tuple[RotState, RotState]) -> float:
-        """Frequency of molecular coherence `pair`."""
-
-    @abc.abstractmethod
     def equilibrium_pop(self, state: RotState, T: float) -> float:
         """Fractional population of `state` at temperature `T` in thermal
         equilibrium."""
+    @abc.abstractmethod
+    def tips(self, T: float) -> float:
+        """Total internal partition function."""
+
+    @abc.abstractmethod
+    def energy(self, state: RotState) -> float:
+        """Return energy of `state`."""
+        pass
+
+    @abc.abstractmethod
+    def degeneracy(self, state: RotState) -> float:
+        """Return quantum state degeneracy."""
+
+    def nu(self, pair: Tuple[RotState, RotState]) -> float:
+        try:
+            return u.wn2nu(self.energy(pair[1])-self.energy(pair[0]))
+        except KeyError as e:
+            raise MissingStateError("Energy for state `{!s}` is not available".format(
+                e.args[0]))
+
+    def difference_pop(self, pair: Tuple[RotState, RotState], T: float) -> float:
+        r"""Population difference factor between nondegenerate states.
+
+        .. math::
+
+            \frac{N_{\nu_1,j_1,d_1}-N_{\nu_2,j_2,d_2}}{N} = \frac{1}{Z} e^{-E_{\nu_1,j_1/kT}} \left( 1 - e^{-h\nu/kT} \right)
+
+        where :math:`d_i` are non-rotational degenerate states labels.
+        """
+        e1, e2 = self.energy(pair[0]), self.energy(pair[1])
+        ediff = e2-e1
+        kT = C.k*T/C.h/100.0/C.c
+
+        return np.exp(-e1/kT)*(1 - np.exp(-ediff/kT))/self.tips(T)
 
 
-class AlchemyModeMixin:
+
+@define
+class LineParams:
+    A: float
+    gamma: float
+    delta: float
+    sw: float
+
+class AlchemyModeMixin(VibrationalMode):
     """Molecular vibrational mode backed by SQLAlchemy sqlite database.
 
-    This is a mix-in."""
-    def line_params(self, pair: Tuple[RotState, RotState]):
-        result = self._line_params(pair)
+    Subclasses need to define and fill the following attributes:
+
+    - ``lines``, dict from 2-tuples of :class:`RotState` to :class:`LineParams`
+    - ``elevels``, dict from :class:`RotState` to energy
+    - ``degeneracies``, dict from :class:`RotState` to quantum state degeneracy
+    """
+    def line_params(self, pair: Tuple[RotState, RotState]) -> Tuple[LineParams, int]:
+        result = self.lines.get(pair)
         if result:
             return (result, 1)
-        result = self._line_params(pair[::-1])
+        result = self.lines.get(pair[::-1])
         if result is None:
             log.debug("Missing line parameters for: %r", pair)
-            result = dict(zip(['A', 'gamma', 'delta', 'sw'], [0]*3))
+            result = LineParams(0, 0, 0, 0)
         return (result, -1)
 
     def gamma(self, pair: Tuple[RotState, RotState]) -> float:
         params, _ = self.line_params(pair)
-        if params is None or params['gamma'] == 0:
+        if params is None or params.gamma == 0:
             gam = self._fake_gamma(pair)
         else:
-            gam = params['gamma']
+            gam = params.gamma
 
         return u.wn2nu(gam)
 
     def sw(self, pair: Tuple[RotState, RotState]) -> float:
-        params, _ = self.line_params(pair)
-        sw = params['sw']
-
-        return sw/1e4           # m**2/molecule
+        "HITRAN line strength in cm-1 cm**2."
+        return self.line_params(pair)[0].sw
 
     def delta(self, pair: Tuple[RotState, RotState]) -> float:
         params, _ = self.line_params(pair)
-        delt = params['delta']
+        delt = params.delta
 
         return u.wn2nu(delt)
-
-    def nu(self, pair: Tuple[RotState, RotState]) -> float:
-        try:
-            return u.wn2nu(self.elevels[pair[1]]-self.elevels[pair[0]])
-        except KeyError as e:
-            raise MissingStateError("Energy for state `{!s}` is not available".format(
-                e.args[0]
-            ))
 
     def mu(self, pair: Tuple[RotState, RotState]) -> float:
         r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
@@ -134,35 +167,30 @@ class AlchemyModeMixin:
 
         .. math::
 
-            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+            \sqrt{S(J', J'')} |\langle \nu' | \mu | \nu'' \rangle| =
+            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} =
+            A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}d'}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
+
+        where :math:`d'` is total degeneracy of the upper state.
         """
-        params, _ = self.line_params(pair)
-        if params is None:
-            print(pair)
-        A = params['A']
-        nu = abs(self.nu(pair))
-        if _ == 1:
-            j = pair[1].j
-        elif _ == -1:
-            j = pair[0].j
-        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
-        # Eq. (5.9) from rotsim2d_roadmap
-        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*(2*j+1)/(16*np.pi**3*nu**3))
-        if pair[0].j < pair[1].j:
-            rmu = -rmu
+        return rme(pair, self)
 
-        return rmu
+    def energy(self, state: RotState) -> float:
+        """Return energy of ``state``."""
+        return self.elevels[state]
 
+    def degeneracy(self, state: RotState):
+        """Return quantum state degeneracy."""
+        return self.degeneracies[state]
     def _fake_gamma(self, pair: Tuple[RotState, RotState]) -> float:
         for kpp, kp in self.lines.keys():
             if pair[0]==kp or pair[0]==kpp or pair[1]==kp or pair[1]==kpp:
-                return self.lines[(kpp, kp)]['gamma']
-
-    def _line_params(self, pair: Tuple[RotState, RotState]):
-        return self.lines.get(pair)
+                return self.lines[(kpp, kp)].gamma
+        raise ValueError("Can't generate fake pressure width for coherence '{:s}".format(pair))
 
 
-class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
+class CH3ClAlchemyMode(AlchemyModeMixin):
+    molecule = 'CH3Cl'
     def __init__(self, engine_or_path=None, iso=1):
         """Provide transition and energy level data of nu3 mode.
 
@@ -196,12 +224,14 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
 
     def _generate_elevels(self, engine: Engine):
         self.elevels = {}
+        self.degeneracies = {}
         with engine.begin() as conn:
             st = CH3Cl_nu3.states
             result = conn.execute(
-                select(st.c.energy, st.c.nu3, st.c.J, st.c.K))
+                select(st.c.energy, st.c.g, st.c.nu3, st.c.J, st.c.K))
             for row in result:
-                self.elevels[SymTopState(*row[1:])] = row[0]
+                self.elevels[SymTopState(*row[2:])] = row[0]
+                self.degeneracies[SymTopState(*row[2:])] = row[1]
 
     def _generate_lines(self, engine: Engine):
         self.lines = {}
@@ -219,8 +249,7 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
             for row in result:
                 spp = SymTopState(*row[4:7])
                 sp = SymTopState(*row[7:10])
-                self.lines[(spp, sp)] = dict(
-                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
+                self.lines[(spp, sp)] = LineParams(*row[:4])
 
     def equilibrium_pop(self, state: RotState, T: float) -> float:
         kt = u.joule2wn(C.k*T)
@@ -230,10 +259,14 @@ class CH3ClAlchemyMode(AlchemyModeMixin, VibrationalMode):
         fudge_factor = 0.5
 
         # return np.sqrt(kfac*(2*state.j+1))*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)
-        return gnuc*k3*(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)*fudge_factor
+        return gnuc*k3*(2*state.j+1)*np.exp(-e/kt)/self.tips(T)*fudge_factor
 
+    def tips(self, T: float) -> float:
+        """jotal internal partition function."""
+        return hap.PYTIPS(24, self._iso, T)
 
-class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
+class COAlchemyMode(AlchemyModeMixin):
+    molecule = "CO"
     def __init__(self, engine_or_path=None, iso=1):
         """Provide transition and energy level data for CO.
 
@@ -271,30 +304,37 @@ class COAlchemyMode(AlchemyModeMixin, VibrationalMode):
             for row in result:
                 spp = DiatomState(*row[4:6])
                 sp = DiatomState(*row[6:8])
-                self.lines[(spp, sp)] = dict(
-                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
+                self.lines[(spp, sp)] = LineParams(*row[:4])
 
     def _generate_elevels(self, engine: Engine):
         self.elevels = {}
+        self.degeneracies = {}
         with engine.begin() as conn:
             st = CO.states
             result = conn.execute(
-                select(st.c.energy, st.c.nu, st.c.J))
+                select(st.c.energy, st.c.g, st.c.nu, st.c.J))
             for row in result:
-                self.elevels[DiatomState(*row[1:])] = row[0]
+                self.elevels[DiatomState(*row[2:])] = row[0]
+                self.degeneracies[DiatomState(*row[2:])] = row[1]
 
     def equilibrium_pop(self, state: RotState, T: float):
-        r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
-        :math:`e^{-E_{\nu,j}/kT}/Q`.
+        r"""Fractional population of spatial sublevel of `state` in thermal
+        equilibrium, :math:`g_{\mathrm{rot}} e^{-E_{\nu,j}/kT}/Q`, where
+        :math:`g_{\mathrm{rot}}` is the rotational degeneracy.
         """
         kt = u.joule2wn(C.k*T)
         e = self.elevels[state]
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return (2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, self._iso, T)
+        return (2*state.j+1)*np.exp(-e/kt)/self.tips(T)
+
+    def tips(self, T: float) -> float:
+        """Total internal partition function."""
+        return hap.PYTIPS(5, self._iso, T)
 
 
-class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
+class C2H2AlchemyMode(AlchemyModeMixin):
+    molecule = "C2H2"
     def __init__(self, engine_or_path=None, iso=1):
         """Provide transition and energy level data for C2H2 nu1+nu3 mode.
 
@@ -332,20 +372,23 @@ class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
             for row in result:
                 spp = DiatomState(*row[4:6])
                 sp = DiatomState(*row[6:8])
-                self.lines[(spp, sp)] = dict(
-                    zip(['A', 'gamma', 'delta', 'sw'], row[:4]))
+                self.lines[(spp, sp)] = LineParams(*row[:4])
 
     def _generate_elevels(self, engine: Engine):
         self.elevels = {}
+        self.degeneracies = {}
         with engine.begin() as conn:
             st = C2H2_nu1nu3.states
             result = conn.execute(
-                select(st.c.energy, st.c.nu1, st.c.J))
+                select(st.c.energy, st.c.g, st.c.nu1, st.c.J))
             for row in result:
-                self.elevels[DiatomState(*row[1:])] = row[0]
+                self.elevels[DiatomState(*row[2:])] = row[0]
+                self.degeneracies[DiatomState(*row[2:])] = row[1]
 
     def degeneracy(self, state: RotState) -> int:
-        """Return quantum state degeneracy."""
+        """Return quantum state degeneracy.
+
+        For ground state, even is 1 and odd is 3. For excited state, even is 3 and odd is 1."""
         jdeg = 2*state.j+1
         if state.nu == 0:
             if state.j % 2 == 0:
@@ -370,34 +413,13 @@ class C2H2AlchemyMode(AlchemyModeMixin, VibrationalMode):
         e = self.elevels[state]
 
         # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return self.degeneracy(state)*np.exp(-e/kt)/hap.PYTIPS(26, self._iso, T)
+        # this needs to be fixed for four-wave mixing
+        return self.degeneracy(state)*np.exp(-e/kt)/self.tips(T)
 
-    def mu(self, pair: Tuple[RotState, RotState]) -> float:
-        r"""Reduced matrix element for `pair[0]` to `pair[1]` transition.
+    def tips(self, T: float) -> float:
+        """Total internal partition function."""
+        return hap.PYTIPS(26, self._iso, T)
 
-        Obtained from HITRAN's Einsten A-coefficient:
-
-        .. math::
-
-            |\langle \nu';J'\|\mu^{(1)}\|\nu'';J''\rangle|^{2} = A_{\nu'J'\to\nu''J''}\frac{\epsilon_{0}hc^{3}(2J'+1)}{16\pi^{3}\nu^{3}_{\nu'J',\nu''J''}}
-        """
-        params, _ = self.line_params(pair)
-        if params is None:
-            print(pair)
-        A = params['A']
-        nu = abs(self.nu(pair))
-        if _ == 1:
-            statep = pair[1]
-        else:
-            statep = pair[0]
-        # rmu = np.sqrt(A*(2*pair[0].j+1)*C.c**3*C.hbar*np.pi*C.epsilon_0*3/(2*np.pi*nu)**3)
-        # Eq. (5.9) from rotsim2d_roadmap
-        deg = self.degeneracy(statep)
-        rmu = np.sqrt(3*A*C.epsilon_0*C.h*C.c**3*deg/(16*np.pi**3*nu**3))
-        if pair[0].j < pair[1].j:
-            rmu = -rmu
-
-        return rmu
 
 class LinearManifold:
     def __init__(self, origin: float, B: float, D: float=0.0, HJ: float=0.0):
