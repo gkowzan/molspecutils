@@ -10,14 +10,11 @@ The main function is :func:`get` which does all these steps if necessary and
 returns :class:`sqlalchemy.Engine.engine` instance for the sql databse.
 """
 # * Imports
-from typing import Union, Sequence
-from types import ModuleType
+from typing import Union
 from importlib import import_module
 from pathlib import Path
-from sqlalchemy import create_engine, select, insert
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import create_engine, insert
 import molspecutils.happier as h
-import molspecutils.mirs as mirs
 from molspecutils.utils import chunked
 import molspecutils.alchemy.meta as meta
 
