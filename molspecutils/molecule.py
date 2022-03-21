@@ -478,3 +478,145 @@ class CH3ClEffectiveMode(CH3ClAlchemyMode):
         Epp = self.manifolds[pair[0].nu].energy(pair[0].j, pair[0].k)
 
         return Ep-Epp
+
+
+# Functions below are mostly for sanity checking my (re)calculations
+def tme_sum(pair: Tuple[RotState, RotState],
+            mode: AlchemyModeMixin) -> float:
+    r"""Unweighted sum of transition matrix elements.
+
+    The sum goes over all degenerate states corresponding to the energy levels
+    in ``pair``. The degeneracy may include spatial degeneracy (magnetic
+    states), hyperfine degeneracy or other kinds. It is related to the Einstein
+    A coefficient for spontaneous emission by:
+
+    .. math::
+
+        \sum_{m_i,m_f,d_if} |\langle \alpha_f J_f m_f d_f|\vec{mu}| J_i m_i d_i \rangle |^2 = \frac{3 A_{fi} \epsilon_0 h c^3 g_f}{16\pi^3\nu^3}
+
+    where :math:`d_x` are labels for degenerate states other than spatial
+    states, :math:`g_f=(2J_f+1)D_f` is the total upper state degeneracy
+    (statistical weight). For rovibrational transitions, this can be expressed as:
+
+    .. math:
+
+        D_i S(J_f, J_i) \langle \nu_f | \mu | \nu_i \rangle
+
+    See Eq. (32) in M. Simečková, M., Jacquemart, D., Rothman, L. S., Gamache,
+    R. R. & Goldman, A. Einstein a-coefficients and statistical weights for
+    molecular absorption transitions in the hitran database. Jqsrt 98, 130–155
+    (2006)
+    and
+    Gamache, R. R. & Rothman, L. S. Extension of the HITRAN database to non-LTE
+    applications. Journal of quantitative spectroscopy and radiative transfer
+    48, 519–525 (1992).
+    """
+    params, _ = mode.line_params(pair)
+    if params is None:
+        print(pair)
+    A = params.A
+    nu = abs(mode.nu(pair))
+    if _ == 1:
+        statep = pair[1]
+    else:
+        statep = pair[0]
+    deg = mode.degeneracy(statep)
+
+    sum = np.abs(3*A*C.epsilon_0*C.h*C.c**3*deg/(16*np.pi**3*nu**3))
+
+    return sum
+
+
+def tme_sum_from_line_strength(pair: Tuple[RotState, RotState],
+                               mode: AlchemyModeMixin) -> float:
+    """The magnitude is not correct."""
+    params, _ = mode.line_params(pair)
+    if params is None:
+        print(pair)
+    sw = params.sw
+    molid = hap.molname2molid(mode.molecule)
+    abundance = hap.h3.ISO[(molid, 1)][2]
+    pop_factor = mode.difference_pop(pair, 296.0)
+    sum = sw/abundance/pop_factor
+
+    return sum
+
+
+def rme(pair: Tuple[RotState, RotState],
+        mode: AlchemyModeMixin) -> float:
+    r"""Calculate reduced matrix element from Einstein A coefficient.
+
+    .. math::
+
+        \sqrt{S(J', J'')} |\langle \nu' | \mu | \nu'' \rangle|
+    """
+    tme = tme_sum(pair, mode)
+    nonrot_deg1 = mode.degeneracy(pair[0])/(2*pair[0].j+1)
+    # nonrot_deg2 = mode.degeneracy(pair[1])/(2*pair[1].j+1)
+    # print("Degeneracies:", nonrot_deg1, nonrot_deg2)
+    rme = np.sqrt(tme/nonrot_deg1)
+    if pair[0].j < pair[1].j:
+        rme = -rme
+
+    return rme
+
+
+def hitran_line_strength_rme(pair: Tuple[RotState, RotState],
+                             mode: AlchemyModeMixin,
+                             unit: str='SI') -> float:
+    molid = hap.molname2molid(mode.molecule)
+    abundance = hap.h3.ISO[(molid, 1)][2]
+    omega = mode.nu(pair)*2*np.pi
+    RME = rme(pair, mode)
+    nucdeg = mode.degeneracy(pair[0])/(2*pair[0].j+1)
+    tme = RME**2*nucdeg
+    pop_factor = mode.difference_pop(pair, 296.0)
+    fac = omega/(C.epsilon_0*C.c*C.hbar*6.0)
+    ls = abundance*tme*pop_factor*fac
+    if unit == 'HITRAN':
+        ls = ls/C.c/100*1e4
+
+    return ls
+
+
+def hitran_line_strength(pair: Tuple[RotState, RotState],
+                         mode: AlchemyModeMixin,
+                         unit: str='SI') -> float:
+    """Return HITRAN line strength for `pair`.
+
+    Parameters
+    ----------
+    pair
+        Transition.
+    mode
+        Molecular vibrational mode.
+    unit
+        'SI' (default) for m**2 Hz, 'HITRAN' for cm-1 cm**2.
+    """
+    molid = hap.molname2molid(mode.molecule)
+    abundance = hap.h3.ISO[(molid, 1)][2]
+    omega = mode.nu(pair)*2*np.pi
+    tme = tme_sum(pair, mode)
+    pop_factor = mode.difference_pop(pair, 296.0)
+    fac = omega/(C.epsilon_0*C.c*C.hbar*6.0)
+    ls = abundance*tme*pop_factor*fac
+    if unit == 'HITRAN':
+        ls = ls/C.c/100*1e4
+
+    return ls
+
+
+def einstein_from_sw(pair: Tuple[RotState, RotState],
+                     mode: AlchemyModeMixin):
+    """Calculate Einstein coefficient A21 from HITRAN line strength."""
+    molid = hap.molname2molid(mode.molecule)
+    nu0 = u.nu2wn(mode.nu(pair))
+    abundance = hap.h3.ISO[(molid, 1)][2]
+    deg = mode.degeneracy(pair[1])
+    c2 = C.h*C.c*100/C.k/296.0
+
+    A = 8*np.pi*100.0*C.c*nu0**2*mode.tips(296.0)*mode.sw(pair)/\
+        np.exp(-c2*mode.energy(pair[0]))/(1 - np.exp(-c2*nu0))/\
+        abundance/deg
+
+    return A
