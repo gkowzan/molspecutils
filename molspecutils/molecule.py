@@ -1,7 +1,6 @@
 """Molecular effective Hamiltonians for calculations of energy levels."""
 import abc
 import logging
-from collections import namedtuple
 from typing import Mapping, Tuple, Union
 
 import numpy as np
@@ -75,10 +74,6 @@ class VibrationalMode(abc.ABC):
         """Reduced matrix element for dipole transition between `pair` states."""
 
     @abc.abstractmethod
-    def equilibrium_pop(self, state: RotState, T: float) -> float:
-        """Fractional population of `state` at temperature `T` in thermal
-        equilibrium."""
-    @abc.abstractmethod
     def tips(self, T: float) -> float:
         """Total internal partition function."""
 
@@ -115,6 +110,11 @@ class VibrationalMode(abc.ABC):
 
 
 
+    def equilibrium_pop(self, state: RotState, T: float) -> float:
+        e = self.energy(state)
+        kt = u.joule2wn(C.k*T)
+
+        return self.degeneracy(state)*np.exp(-e/kt)/self.tips(T)
 @define
 class LineParams:
     A: float
@@ -179,7 +179,7 @@ class AlchemyModeMixin(VibrationalMode):
         """Return energy of ``state``."""
         return self.elevels[state]
 
-    def degeneracy(self, state: RotState):
+    def degeneracy(self, state: RotState) -> float:
         """Return quantum state degeneracy."""
         return self.degeneracies[state]
     def _fake_gamma(self, pair: Tuple[RotState, RotState]) -> float:
@@ -251,15 +251,14 @@ class CH3ClAlchemyMode(AlchemyModeMixin):
                 sp = SymTopState(*row[7:10])
                 self.lines[(spp, sp)] = LineParams(*row[:4])
 
-    def equilibrium_pop(self, state: RotState, T: float) -> float:
-        kt = u.joule2wn(C.k*T)
-        e = self.elevels[state]
+    def _custom_degeneracy(self, state: RotState) -> float:
         gnuc = 16
         k3 = 2 if state.k > 0 and state.k % 3 == 0 else 1
-        fudge_factor = 0.5
 
-        # return np.sqrt(kfac*(2*state.j+1))*np.exp(-e/kt)/hap.PYTIPS(24, 1, T)
-        return gnuc*k3*(2*state.j+1)*np.exp(-e/kt)/self.tips(T)*fudge_factor
+        return gnuc*k3*(2*state.j+1)
+
+    def mu(self, pair: Tuple[RotState, RotState]) -> float:
+        return super().mu(pair)*0.5
 
     def tips(self, T: float) -> float:
         """jotal internal partition function."""
@@ -317,16 +316,8 @@ class COAlchemyMode(AlchemyModeMixin):
                 self.elevels[DiatomState(*row[2:])] = row[0]
                 self.degeneracies[DiatomState(*row[2:])] = row[1]
 
-    def equilibrium_pop(self, state: RotState, T: float):
-        r"""Fractional population of spatial sublevel of `state` in thermal
-        equilibrium, :math:`g_{\mathrm{rot}} e^{-E_{\nu,j}/kT}/Q`, where
-        :math:`g_{\mathrm{rot}}` is the rotational degeneracy.
-        """
-        kt = u.joule2wn(C.k*T)
-        e = self.elevels[state]
-
-        # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        return (2*state.j+1)*np.exp(-e/kt)/self.tips(T)
+    def _custom_degeneracy(self, state: RotState) -> float:
+        return 2*state.j+1
 
     def tips(self, T: float) -> float:
         """Total internal partition function."""
@@ -385,7 +376,7 @@ class C2H2AlchemyMode(AlchemyModeMixin):
                 self.elevels[DiatomState(*row[2:])] = row[0]
                 self.degeneracies[DiatomState(*row[2:])] = row[1]
 
-    def degeneracy(self, state: RotState) -> int:
+    def _custom_degeneracy(self, state: RotState) -> int:
         """Return quantum state degeneracy.
 
         For ground state, even is 1 and odd is 3. For excited state, even is 3 and odd is 1."""
@@ -404,17 +395,6 @@ class C2H2AlchemyMode(AlchemyModeMixin):
             raise ValueError("Can't calculate degeneracy for '{:s}'".format(state))
 
         return jdeg*nucdeg
-
-    def equilibrium_pop(self, state: RotState, T: float):
-        r"""Fractional population of spatial sublevel of `state` in thermal equilibrium,
-        :math:`e^{-E_{\nu,j}/kT}/Q`.
-        """
-        kt = u.joule2wn(C.k*T)
-        e = self.elevels[state]
-
-        # return np.sqrt(2*state.j+1)*np.exp(-e/kt)/hap.PYTIPS(5, 1, T)
-        # this needs to be fixed for four-wave mixing
-        return self.degeneracy(state)*np.exp(-e/kt)/self.tips(T)
 
     def tips(self, T: float) -> float:
         """Total internal partition function."""
