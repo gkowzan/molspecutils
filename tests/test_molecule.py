@@ -1,13 +1,6 @@
 import pytest
 import molspecutils.molecule as mol
 
-def test_rotstate_inheritance():
-    state_dia = mol.DiatomState(nu=0, j=10)
-    assert isinstance(state_dia, mol.RotState)
-
-    state_top = mol.SymTopState(nu=0, j=10, k=5)
-    assert isinstance(state_top, mol.RotState)
-
 
 def test_rotstate_inequality():
     state_dia = mol.DiatomState(nu=0, j=10)
