@@ -26,51 +26,35 @@ class MissingLineError(Exception):
     pass
 
 
+@define(frozen=True, cache_hash=True, order=True)
+class DiatomState:
+    nu: int
+    j: int
+    name: str = field(init=False, eq=False, repr=False)
 
-class DiatomState(namedtuple("DiatomState", ["nu", "j"])):
-    """Named tuple representing diatom rovib state with `nu`, `j` quantum numbers."""
-    __slots__ = ()
+    def __attrs_post_init__(self):
+        object.__setattr__(self, "name",
+                           "{:d},{:d}".format(self.nu, self.j))
 
     @classmethod
-    def from_symtop(cls, symtop):
-        """Drop `k` from :class:`SymTopState`."""
-        return cls(nu=symtop.nu, j=symtop.j)
-
-    @property
-    def name(self):
-        return "{:d},{:d}".format(self.nu, self.j)
-
-    def __repr__(self):
-        return "DiatomState(nu={:d}, j={:d})".format(self.nu, self.j)
-
-    def __eq__(self, o):
-        if not isinstance(o, DiatomState):
-            return NotImplemented
-        return self.nu == o.nu and self.j == o.j
-
-    def __hash__(self):
-        return hash((self.nu, self.j))
+    def from_symtop(cls, symtop: "SymTopState"):
+        return cls(symtop.nu, symtop.j)
 
 
-class SymTopState(namedtuple("SymTopState", ["nu", "j", "k"])):
-    """Named tuple representing symmetric top rovib state with `nu`, `j`, `k`
-    quantum numbers."""
-    __slots__ = ()
+@define(frozen=True, cache_hash=True, order=True)
+class SymTopState:
+    nu: int
+    j: int
+    k: int
+    name: str = field(init=False, eq=False, repr=False)
 
-    @property
-    def name(self) -> str:
-        return "{:d},{:d},{:d}".format(self.nu, self.j, self.k)
+    def __attrs_post_init__(self):
+        object.__setattr__(self, "name",
+                           "{:d},{:d},{:d}".format(self.nu, self.j, self.k))
 
-    def __repr__(self) -> str:
-        return "SymTopState(nu={:d}, j={:d}, k={:d})".format(self.nu, self.j, self.k)
-
-    def __eq__(self, o) -> bool:
-        if not isinstance(o, SymTopState):
-            return NotImplemented
-        return self.nu == o.nu and self.k == o.k and self.j == o.j
-
-    def __hash__(self) -> int:
-        return hash((self.nu, self.j, self.k))
+    @classmethod
+    def from_diatom(cls, diatom: DiatomState, k: int):
+        return cls(diatom.nu, diatom.j, k)
 
 
 RotState = Union[DiatomState, SymTopState]
