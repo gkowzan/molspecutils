@@ -109,18 +109,20 @@ class VibrationalMode(abc.ABC):
         return np.exp(-e1/kT)*(1 - np.exp(-ediff/kT))/self.tips(T)
 
 
-
     def equilibrium_pop(self, state: RotState, T: float) -> float:
         e = self.energy(state)
         kt = u.joule2wn(C.k*T)
 
         return self.degeneracy(state)*np.exp(-e/kt)/self.tips(T)
+
+
 @define
 class LineParams:
     A: float
     gamma: float
     delta: float
     sw: float
+
 
 class AlchemyModeMixin(VibrationalMode):
     """Molecular vibrational mode backed by SQLAlchemy sqlite database.
@@ -182,6 +184,7 @@ class AlchemyModeMixin(VibrationalMode):
     def degeneracy(self, state: RotState) -> float:
         """Return quantum state degeneracy."""
         return self.degeneracies[state]
+
     def _fake_gamma(self, pair: Tuple[RotState, RotState]) -> float:
         for kpp, kp in self.lines.keys():
             if pair[0]==kp or pair[0]==kpp or pair[1]==kp or pair[1]==kpp:
@@ -257,12 +260,13 @@ class CH3ClAlchemyMode(AlchemyModeMixin):
 
         return gnuc*k3*(2*state.j+1)
 
-    def mu(self, pair: Tuple[RotState, RotState]) -> float:
-        return super().mu(pair)*0.5
+    def equilibrium_pop(self, state: RotState, T: float) -> float:
+        return super().equilibrium_pop(state, T)*0.5
 
     def tips(self, T: float) -> float:
-        """jotal internal partition function."""
+        """Total internal partition function."""
         return hap.PYTIPS(24, self._iso, T)
+
 
 class COAlchemyMode(AlchemyModeMixin):
     molecule = "CO"
