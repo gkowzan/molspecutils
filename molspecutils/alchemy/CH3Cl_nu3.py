@@ -27,6 +27,7 @@ def state_dicts(row: HITRANRow):
 
 
 def skip_func(statepp: dict, statep: dict) -> bool:
+    """Take only nu3 data."""
     nus = ['nu'+str(i) for i in (1, 2, 4, 5, 6)]
     pp = [statepp[nu]==0 for nu in nus]
     p = [statep[nu]==0 for nu in nus]
