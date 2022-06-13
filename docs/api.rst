@@ -2,9 +2,6 @@ API
 ===
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    api/molecule
-   api/happier
-   api/mirs
-   api/alchemy.convert

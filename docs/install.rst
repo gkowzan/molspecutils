@@ -3,27 +3,25 @@ Installation
 
 **Dependencies**
 
-- numpy, scipy, appdirs, SQLAlchemy
-- `knickknacks <https://gitlab.com/allisonlab/mdcs/shed>`_
+- attrs
+- numpy
+- scipy
+- appdirs
+- SQLAlchemy
 
 **Install**
 
 .. highlight:: sh
 
-Install the package from our private GitLab repository by executing::
+The package is available on the Python Package Index and can be most easily installed with `pip`::
 
-  pip install rotsim2d --extra-index-url https://<token_name>:<token>@gitlab.com/api/v4/projects/26140156/packages/pypi
-
-where `<token_name>` and `<token>` are obtained by creating a personal token
-with `read_api`` scope. See `Creating personal access tokens
-<https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html#creating-a-personal-access-token>`_
-for details.
+  pip install molspecutils
 
 Molecular data
 ++++++++++++++
 
-`molspecutils.molecule.COAlchemyMode` and
-`molspecutils.molecule.CH3ClAlchemyMode` provide simple interfaces to data on
+:class:`molspecutils.molecule.COAlchemyMode` and
+:class:`molspecutils.molecule.CH3ClAlchemyMode` provide simple interfaces to data on
 rovibrational transitions and energy levels of CO and CH3Cl :math:`\nu_3`
 vibrational mode. The molecular data is not
 bundled with the package and during the first run :mod:`molspecutils` will use

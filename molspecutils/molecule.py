@@ -1,4 +1,4 @@
-"""Molecular effective Hamiltonians for calculations of energy levels."""
+"""Classes representing rovibrational molecular states and vibrational modes."""
 import abc
 import logging
 from typing import Mapping, Tuple, Union
