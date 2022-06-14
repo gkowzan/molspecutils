@@ -1,3 +1,5 @@
+.. _molspecutils:
+
 Molecular spectroscopy utilities
 ================================
 
